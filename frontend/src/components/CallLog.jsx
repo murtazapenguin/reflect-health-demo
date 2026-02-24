@@ -50,7 +50,7 @@ const CallLog = () => {
             <option value="">All Intents</option>
             <option value="eligibility">Eligibility</option>
             <option value="claims">Claims</option>
-            <option value="general">General</option>
+            <option value="other">Other</option>
           </select>
           <select value={outcomeFilter} onChange={(e) => setOutcomeFilter(e.target.value)}
             className="text-sm bg-card border border-border rounded-xl px-3 py-2.5 text-foreground focus:outline-none focus:border-primary transition-all">
