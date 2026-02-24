@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.config import get_settings
 from app.database import get_database
 
 router = APIRouter(tags=["health"])
@@ -8,6 +9,14 @@ router = APIRouter(tags=["health"])
 @router.get("/health", summary="Liveness probe")
 async def health_check():
     return {"status": "healthy"}
+
+
+@router.get("/debug/cors", summary="Show CORS config")
+async def debug_cors():
+    s = get_settings()
+    raw = s.cors_allowed_origins
+    origins = [o.strip() for o in raw.split(",") if o.strip()] if raw else []
+    return {"raw": raw, "parsed_origins": origins}
 
 
 @router.get("/readiness", summary="Readiness probe")
