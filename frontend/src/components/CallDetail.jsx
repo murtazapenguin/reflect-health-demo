@@ -236,11 +236,36 @@ const CallDetail = () => {
               verified: 'Zip Verified',
               found: 'Lookup Result',
               message: 'Details',
+              service_type: 'Service',
+              service_covered: 'Covered',
+              service_copay: 'Service Copay',
+              service_coinsurance: 'Coinsurance',
+              service_prior_auth: 'Prior Auth Required',
+              service_visit_limit: 'Visit Limit',
+              service_notes: 'Service Notes',
+              plan_name: 'Plan',
+              status: 'Member Status',
+              member_id: 'Member ID',
+              effective_date: 'Effective Date',
+              term_date: 'Term Date',
+              copay_primary: 'Primary Copay',
+              copay_specialist: 'Specialist Copay',
+              deductible: 'Deductible',
+              deductible_met: 'Deductible Met',
+              cob_status: 'COB Status',
+              out_of_pocket_max: 'OOP Max',
+              out_of_pocket_met: 'OOP Met',
             }
+            const BOOL_KEYS = new Set(['found', 'valid', 'verified', 'service_covered', 'service_prior_auth'])
+            const DOLLAR_KEYS = new Set(['service_copay', 'copay_primary', 'copay_specialist', 'deductible', 'deductible_met', 'out_of_pocket_max', 'out_of_pocket_met'])
             const formatValue = (key, val) => {
               const s = String(val)
               if (key === 'found') return s === 'true' ? 'Found' : 'Not Found'
               if (key === 'valid' || key === 'verified') return s === 'true' ? 'Yes' : 'No'
+              if (key === 'service_covered') return s === 'true' ? 'Yes' : s === 'false' ? 'No' : 'Unknown'
+              if (key === 'service_prior_auth') return s === 'true' ? 'Yes' : 'No'
+              if (key === 'service_coinsurance' && val != null) return `${val}%`
+              if (DOLLAR_KEYS.has(key) && val != null) return `$${val}`
               return s
             }
             return (
@@ -271,7 +296,9 @@ const CallDetail = () => {
                       <dt className="type-micro text-muted-foreground">{LABEL_MAP[key] || key}</dt>
                       <dd className={`text-xs font-medium text-right max-w-[60%] truncate ${
                         key === 'found' ? (String(value) === 'true' ? 'text-emerald-600' : 'text-amber-600') :
+                        key === 'service_covered' ? (String(value) === 'true' ? 'text-emerald-600' : String(value) === 'false' ? 'text-red-600' : 'text-amber-600') :
                         (key === 'valid' || key === 'verified') ? (String(value) === 'true' ? 'text-emerald-600' : 'text-red-600') :
+                        key === 'service_prior_auth' ? (String(value) === 'true' ? 'text-amber-600' : 'text-emerald-600') :
                         'text-foreground'
                       }`} title={String(value)}>
                         {formatValue(key, value)}

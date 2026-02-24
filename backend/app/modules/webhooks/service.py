@@ -101,6 +101,16 @@ def _build_tags(intent: str, outcome: str, variables: dict) -> list:
         if ms in ("termed", "inactive"):
             tags.append("inactive-member")
 
+    service_type = variables.get("service_type")
+    if service_type:
+        tags.append("service-check")
+        service_covered = variables.get("service_covered")
+        if service_covered is not None:
+            if str(service_covered).lower() in ("true", "1"):
+                tags.append("service-covered")
+            elif str(service_covered).lower() in ("false", "0"):
+                tags.append("service-not-covered")
+
     return tags
 
 
