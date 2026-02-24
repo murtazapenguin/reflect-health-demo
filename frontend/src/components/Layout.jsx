@@ -25,7 +25,7 @@ const Layout = ({ user, onLogout }) => {
 
   return (
     <div className="min-h-screen bg-background flex">
-      <div className={`${sidebarCollapsed ? 'w-16' : 'w-64'} sidebar-glass transition-all duration-300 flex flex-col`}>
+      <div className={`${sidebarCollapsed ? 'w-16' : 'w-64'} sidebar-glass transition-all duration-300 flex flex-col h-screen sticky top-0`}>
         <div className="p-4 border-b border-border flex items-center">
           <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className="w-8 h-8 flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/5 rounded-lg transition-all">
@@ -68,8 +68,6 @@ const Layout = ({ user, onLogout }) => {
             </div>
           </div>
         )}
-
-        <div className="flex-1"></div>
 
         <div className={`p-3 border-t border-border ${sidebarCollapsed ? 'px-2' : ''}`}>
           {!sidebarCollapsed && (
