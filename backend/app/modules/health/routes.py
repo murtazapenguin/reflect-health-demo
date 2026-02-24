@@ -13,10 +13,16 @@ async def health_check():
 
 @router.get("/debug/cors", summary="Show CORS config")
 async def debug_cors():
+    import os
     s = get_settings()
-    raw = s.cors_allowed_origins
-    origins = [o.strip() for o in raw.split(",") if o.strip()] if raw else []
-    return {"raw": raw, "parsed_origins": origins}
+    raw_setting = s.cors_allowed_origins
+    raw_env = os.environ.get("CORS_ALLOWED_ORIGINS", "<NOT SET>")
+    env_keys = [k for k in os.environ.keys() if "CORS" in k.upper() or "ORIGIN" in k.upper()]
+    return {
+        "pydantic_value": raw_setting,
+        "env_var": raw_env,
+        "matching_env_keys": env_keys,
+    }
 
 
 @router.get("/readiness", summary="Readiness probe")
