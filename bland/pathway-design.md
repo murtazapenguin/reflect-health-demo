@@ -145,29 +145,39 @@ Rules:
 
 ### NODE: Claims: Collect Patient Info
 - **Type**: Wait for Response
-- **Prompt**: "I can look up a claim for you. What is the patient's name and date of birth?"
+- **Prompt**: "I can look up a claim for you. What is the patient's first and last name, and date of birth?"
 - **Extract Variables**:
-  - `patient_name` (string)
-  - `patient_dob` (string)
-- **Condition**: "You must get both the patient name and date of birth."
+  - `patient_name` (string): Description: "The patient's full name (first and last)"
+  - `patient_dob` (string): Description: "The patient's date of birth in YYYY-MM-DD format. Convert spoken dates like 'March 4th 1982' to '1982-03-04'"
+- **Condition**: "You must get both the patient's name and date of birth before proceeding."
+- **Post-extraction speech**: "Got it, {{patient_name}}, born {{patient_dob}}."
+
+> **IMPORTANT**: This node does NOT call any webhook. It only collects the patient name and DOB, then always routes to "Claims: Get Claim Number". Do not attach the LookupClaim webhook here.
+
 - **Pathways**:
-  - "Got patient info" → Claims: Get Claim Number
+  - "Got patient name and date of birth" → Claims: Get Claim Number
 
 ---
 
 ### NODE: Claims: Get Claim Number
 - **Type**: Wait for Response
-- **Prompt**: "Do you have the claim number? If not, I can look it up by date of service."
+- **Prompt**: "Do you have the claim number? It usually starts with CLM followed by a dash and some digits. If you don't have it, I can search by date of service instead."
 - **Extract Variables**:
-  - `claim_number` (string): Description: "The claim number, typically in format CLM-XXXXXXXX"
-  - `date_of_service` (string): Description: "The date of service in YYYY-MM-DD format, if no claim number provided"
+  - `claim_number` (string): Description: "The claim number, typically in format CLM-XXXXXXXX. Could also be spoken as just digits."
+  - `date_of_service` (string): Description: "The date of service in YYYY-MM-DD format, only if no claim number is provided"
+- **Condition**: "You must get either a claim number OR a date of service before calling the webhook."
 - **Post-extraction speech**: "One moment while I look that up."
-- **Webhook**: Call `LookupClaim` tool
+
+> **IMPORTANT**: This is the ONLY claims node that calls the LookupClaim webhook. It must always be reached before calling the webhook.
+
+- **Webhook**: Call `LookupClaim` tool with npi, claim_number, patient_name, patient_dob, date_of_service
 - **Pathways**:
   - "Claim found and status is 'paid'" → Claims: Paid
   - "Claim found and status is 'denied'" → Claims: Denied
   - "Claim found and status is 'pending'" → Claims: Pending
-  - "Claim not found" → Claims: Not Found
+  - "Webhook returned found=false AND message contains 'No patient found'" → Claims: Patient Not Found
+  - "Webhook returned found=false AND message contains 'no claims on file'" → Claims: No Claims
+  - "Webhook returned found=false AND message contains claim number" → Claims: Claim Not Found
 
 ---
 
@@ -200,9 +210,27 @@ Rules:
 
 ---
 
-### NODE: Claims: Not Found
+### NODE: Claims: Patient Not Found
 - **Type**: Wait for Response
-- **Prompt**: "I wasn't able to find that claim. Would you like to try a different claim number or date of service? Or I can transfer you to someone who can help."
+- **Prompt**: "I wasn't able to find a patient matching that name and date of birth. Could you double-check the spelling and try again? Or I can transfer you to a team member."
+- **Pathways**:
+  - "Caller provides corrected info" → Claims: Collect Patient Info
+  - "Caller wants transfer" → Transfer to Human
+
+---
+
+### NODE: Claims: No Claims
+- **Type**: Wait for Response
+- **Prompt**: "I found the patient, but there are no claims on file matching that information. Would you like to try a different claim number or date of service? Or I can transfer you to someone who can dig into this further."
+- **Pathways**:
+  - "Caller wants to try again" → Claims: Get Claim Number
+  - "Caller wants transfer" → Transfer to Human
+
+---
+
+### NODE: Claims: Claim Not Found
+- **Type**: Wait for Response
+- **Prompt**: "I wasn't able to find a claim matching that number. It's possible the claim number was entered differently in our system. Would you like to try a different claim number, or I can search by date of service instead? I can also transfer you to a team member who can dig into this further."
 - **Pathways**:
   - "Caller provides new info" → Claims: Get Claim Number
   - "Caller wants transfer" → Transfer to Human

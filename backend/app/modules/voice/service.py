@@ -75,6 +75,36 @@ NICKNAME_MAP = {
     "sandy": "sandra",
 }
 
+# STT often converts spoken letters to words: "J" -> "Jay", "K" -> "Kay", etc.
+LETTER_SOUND_MAP = {
+    "ay": "a", "aye": "a",
+    "bee": "b",
+    "cee": "c", "see": "c", "sea": "c",
+    "dee": "d",
+    "ee": "e",
+    "eff": "f",
+    "gee": "g",
+    "aitch": "h",
+    "eye": "i",
+    "jay": "j",
+    "kay": "k",
+    "el": "l", "elle": "l",
+    "em": "m",
+    "en": "n",
+    "oh": "o",
+    "pee": "p",
+    "que": "q", "cue": "q",
+    "are": "r", "ar": "r",
+    "es": "s", "ess": "s",
+    "tee": "t",
+    "you": "u",
+    "vee": "v",
+    "double you": "w",
+    "ex": "x",
+    "why": "y",
+    "zee": "z", "zed": "z",
+}
+
 
 def _normalize_dob(raw: str) -> Optional[str]:
     """Parse spoken/typed DOB into YYYY-MM-DD. Returns None if unparseable."""
@@ -145,28 +175,29 @@ def _fuzzy_name_query(patient_name: str) -> Optional[dict]:
     first_raw = parts[0].lower().rstrip(".")
     last_raw = parts[-1].lower()
 
-    # Last name: exact case-insensitive (reliable from STT)
     query = {"last_name": {"$regex": f"^{re.escape(last_raw)}$", "$options": "i"}}
 
-    # First name: build alternatives
+    # Check if STT turned a spoken letter into a word (e.g., "J" -> "Jay")
+    letter_initial = LETTER_SOUND_MAP.get(first_raw)
+
+    if len(first_raw) == 1 or letter_initial:
+        # Single initial or letter-sound: prefix match on that letter
+        initial = letter_initial or first_raw
+        query["first_name"] = {"$regex": f"^{re.escape(initial)}", "$options": "i"}
+        logger.info("Fuzzy name query (initial '{}' from '{}'): {}", initial, first_raw, query)
+        return query
+
     first_options = [re.escape(first_raw)]
 
-    # Add canonical name if input is a nickname
     if first_raw in NICKNAME_MAP:
         first_options.append(re.escape(NICKNAME_MAP[first_raw]))
 
-    # Add nicknames if input is the canonical name (reverse lookup)
     for nick, canonical in NICKNAME_MAP.items():
-        if canonical == first_raw and nick not in first_options:
+        if canonical == first_raw and re.escape(nick) not in first_options:
             first_options.append(re.escape(nick))
 
-    if len(first_raw) == 1:
-        # Single initial: match any name starting with that letter
-        query["first_name"] = {"$regex": f"^{re.escape(first_raw)}", "$options": "i"}
-    else:
-        # Match exact OR any alternative (nickname/canonical)
-        pattern = "|".join(f"^{opt}$" for opt in first_options)
-        query["first_name"] = {"$regex": pattern, "$options": "i"}
+    pattern = "|".join(f"^{opt}$" for opt in first_options)
+    query["first_name"] = {"$regex": pattern, "$options": "i"}
 
     logger.info("Fuzzy name query: input='{}' -> {}", patient_name, query)
     return query
@@ -289,17 +320,29 @@ async def lookup_eligibility(
 ) -> EligibilityResponse:
     if not patient_name and not member_id:
         logger.info("Eligibility lookup missing patient_name and member_id")
-        return EligibilityResponse(found=False)
+        return EligibilityResponse(
+            found=False,
+            message="Missing patient name and member ID. Please provide at least one.",
+        )
     if member_id:
         member = await Member.find_one(Member.member_id == member_id.strip().upper())
         if member:
             return _member_to_eligibility(member)
+        return EligibilityResponse(
+            found=False,
+            message=f"No member found with ID {member_id}.",
+        )
 
     members = await _find_members_fuzzy(patient_name, patient_dob)
 
     if len(members) == 0:
         logger.info("Eligibility lookup failed: {} / {}", patient_name, patient_dob)
-        return EligibilityResponse(found=False)
+        return EligibilityResponse(
+            found=False,
+            message=f"No patient found matching name '{patient_name}'"
+            + (f" and DOB '{patient_dob}'" if patient_dob else "")
+            + ". Please verify spelling and try again.",
+        )
 
     if len(members) == 1:
         return _member_to_eligibility(members[0])
@@ -348,23 +391,46 @@ async def lookup_claims(
             if claim:
                 return _claim_to_response(claim)
 
+        return ClaimsResponse(
+            found=False,
+            message=f"No claim found with number '{claim_number}' (searched as '{claim_clean}'). "
+            "Please verify the claim number and try again.",
+        )
+
     if patient_name:
         logger.info("Claims patient lookup: name='{}' dob='{}'", patient_name, patient_dob)
         members = await _find_members_fuzzy(patient_name, patient_dob)
         logger.info("Claims member search found {} members: {}", len(members), [m.member_id for m in members])
-        if members:
-            member_ids = [m.member_id for m in members]
-            claim_query = {"member_id": {"$in": member_ids}}
-            if date_of_service:
-                dos_normalized = _normalize_dob(date_of_service)
-                claim_query["date_of_service"] = dos_normalized or date_of_service.strip()
+        if not members:
+            return ClaimsResponse(
+                found=False,
+                message=f"No patient found matching name '{patient_name}'"
+                + (f" and DOB '{patient_dob}'" if patient_dob else "")
+                + ". Please verify the patient information.",
+            )
+        member_ids = [m.member_id for m in members]
+        claim_query = {"member_id": {"$in": member_ids}}
+        if date_of_service:
+            dos_normalized = _normalize_dob(date_of_service)
+            claim_query["date_of_service"] = dos_normalized or date_of_service.strip()
 
-            claims = await Claim.find(claim_query).sort("-date_of_service").to_list()
-            if claims:
-                return _claim_to_response(claims[0])
+        claims = await Claim.find(claim_query).sort("-date_of_service").to_list()
+        if claims:
+            return _claim_to_response(claims[0])
+
+        matched_name = f"{members[0].first_name} {members[0].last_name}"
+        return ClaimsResponse(
+            found=False,
+            message=f"Patient '{matched_name}' found, but no claims on file"
+            + (f" for date of service '{date_of_service}'" if date_of_service else "")
+            + ".",
+        )
 
     logger.info("Claims lookup failed: claim={} name={} dos={}", claim_number, patient_name, date_of_service)
-    return ClaimsResponse(found=False)
+    return ClaimsResponse(
+        found=False,
+        message="No claim number or patient name provided. Please provide at least one.",
+    )
 
 
 def _claim_to_response(claim: Claim) -> ClaimsResponse:

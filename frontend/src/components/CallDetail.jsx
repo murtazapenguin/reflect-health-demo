@@ -220,21 +220,68 @@ const CallDetail = () => {
             </dl>
           </div>
 
-          {Object.keys(call.extracted_data).length > 0 && (
-            <div className="metric-card">
-              <h3 className="text-sm font-semibold text-foreground mb-3">Extracted Data</h3>
-              <dl className="space-y-2">
-                {Object.entries(call.extracted_data).map(([key, value]) => (
-                  <div key={key} className="flex justify-between">
-                    <dt className="type-micro text-muted-foreground">{key}</dt>
-                    <dd className="text-xs font-medium text-foreground text-right max-w-[60%] truncate" title={String(value)}>
-                      {String(value)}
-                    </dd>
+          {Object.keys(call.extracted_data).length > 0 && (() => {
+            const data = call.extracted_data
+            const lookupFailed = data.found === 'false' || data.found === false
+            const hasMessage = !!data.message
+            const LABEL_MAP = {
+              call_intent: 'Intent',
+              npi: 'NPI',
+              zip_code: 'Zip Code',
+              provider_name: 'Provider',
+              patient_name: 'Patient',
+              patient_dob: 'DOB',
+              claim_number: 'Claim #',
+              valid: 'NPI Valid',
+              verified: 'Zip Verified',
+              found: 'Lookup Result',
+              message: 'Details',
+            }
+            const formatValue = (key, val) => {
+              const s = String(val)
+              if (key === 'found') return s === 'true' ? 'Found' : 'Not Found'
+              if (key === 'valid' || key === 'verified') return s === 'true' ? 'Yes' : 'No'
+              return s
+            }
+            return (
+              <div className="metric-card">
+                <h3 className="text-sm font-semibold text-foreground mb-3">Extracted Data</h3>
+                {lookupFailed && (
+                  <div className="mb-3 p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                    <p className="text-xs font-semibold text-amber-800 mb-0.5">
+                      {data.claim_number ? 'Claim Not Found' :
+                       data.patient_name ? 'Patient Not Found' : 'Lookup Failed'}
+                    </p>
+                    {hasMessage && (
+                      <p className="text-[11px] text-amber-700 leading-relaxed">{data.message}</p>
+                    )}
+                    {!hasMessage && data.patient_name && (
+                      <p className="text-[11px] text-amber-700 leading-relaxed">
+                        No match for "{data.patient_name}"{data.patient_dob ? ` (DOB: ${data.patient_dob})` : ''}.
+                        The name may have been misheard by voice recognition.
+                      </p>
+                    )}
                   </div>
-                ))}
-              </dl>
-            </div>
-          )}
+                )}
+                <dl className="space-y-2">
+                  {Object.entries(data)
+                    .filter(([key]) => key !== 'message')
+                    .map(([key, value]) => (
+                    <div key={key} className="flex justify-between">
+                      <dt className="type-micro text-muted-foreground">{LABEL_MAP[key] || key}</dt>
+                      <dd className={`text-xs font-medium text-right max-w-[60%] truncate ${
+                        key === 'found' ? (String(value) === 'true' ? 'text-emerald-600' : 'text-amber-600') :
+                        (key === 'valid' || key === 'verified') ? (String(value) === 'true' ? 'text-emerald-600' : 'text-red-600') :
+                        'text-foreground'
+                      }`} title={String(value)}>
+                        {formatValue(key, value)}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            )
+          })()}
 
           <div className="metric-card">
             <h3 className="text-sm font-semibold text-foreground mb-3">Tags</h3>
