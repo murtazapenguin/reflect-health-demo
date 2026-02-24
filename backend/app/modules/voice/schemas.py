@@ -29,6 +29,7 @@ class EligibilityRequest(BaseModel):
     patient_name: Optional[str] = None
     patient_dob: Optional[str] = None
     member_id: Optional[str] = None
+    service_type: Optional[str] = None
 
 
 class EligibilityResponse(BaseModel):
@@ -47,6 +48,13 @@ class EligibilityResponse(BaseModel):
     cob_status: Optional[str] = None
     out_of_pocket_max: Optional[int] = None
     out_of_pocket_met: Optional[int] = None
+    service_type: Optional[str] = None
+    service_covered: Optional[bool] = None
+    service_copay: Optional[int] = None
+    service_coinsurance: Optional[int] = None
+    service_prior_auth: Optional[bool] = None
+    service_visit_limit: Optional[str] = None
+    service_notes: Optional[str] = None
 
 
 class ClaimsRequest(BaseModel):

@@ -116,17 +116,65 @@ Rules:
 
 ### NODE: Eligibility: Collect Patient Info
 - **Type**: Wait for Response
-- **Prompt**: "You're verified. I can look up patient eligibility for you. What is the patient's first and last name, and date of birth?"
+- **Prompt**: "You're verified. I can look up patient eligibility for you. What is the patient's first and last name, date of birth, and what service or procedure are you checking coverage for?"
 - **Extract Variables**:
   - `patient_name` (string): Description: "The patient's full name (first and last)"
   - `patient_dob` (string): Description: "The patient's date of birth in YYYY-MM-DD format. Convert spoken dates like 'March 4th 1982' to '1982-03-04'"
-- **Condition**: "You must get both the patient's name and date of birth."
-- **Post-extraction speech**: "I have {{patient_name}}, born {{patient_dob}}. Let me look that up for you."
-- **Webhook**: Call `LookupEligibility` tool with npi, patient_name, patient_dob
+  - `service_type` (string): Description: "The medical service or procedure the provider is checking coverage for, if mentioned. Examples: MRI, physical therapy, lab work, specialist visit, surgery, chiropractic, mental health, CT scan, x-ray, urgent care, emergency room, prescription. Leave blank if not mentioned."
+- **Condition**: "You must get the patient's name and date of birth. The service type is optional at this stage."
+- **Post-extraction speech**: "I have {{patient_name}}, born {{patient_dob}}."
 - **Pathways**:
-  - "Patient found and status is 'active'" → Eligibility: Active
+  - "Got patient info AND service_type is filled" → Eligibility: Lookup
+  - "Got patient info BUT service_type is empty" → Eligibility: Collect Service
+
+---
+
+### NODE: Eligibility: Collect Service
+- **Type**: Wait for Response
+- **Prompt**: "What service or procedure are you checking coverage for? For example, an MRI, physical therapy, specialist visit, or lab work."
+- **Extract Variables**:
+  - `service_type` (string): Description: "The medical service or procedure. Examples: MRI, physical therapy, lab work, specialist visit, surgery, chiropractic, mental health, CT scan, x-ray, urgent care, emergency room, prescription."
+- **Condition**: "You must get a service type before proceeding."
+- **Pathways**:
+  - "Got service type" → Eligibility: Lookup
+
+---
+
+### NODE: Eligibility: Lookup
+- **Type**: Default Node
+- **Prompt**: "Let me look that up for you."
+- **Webhook**: Call `LookupEligibility` tool with npi, patient_name, patient_dob, service_type
+- **Pathways**:
+  - "Patient found, status is 'active', and service_covered is true" → Eligibility: Service Covered
+  - "Patient found, status is 'active', and service_covered is false" → Eligibility: Service Not Covered
+  - "Patient found, status is 'active', but service_covered is null (unrecognized service)" → Eligibility: Active
   - "Patient found and status is 'inactive' or 'termed'" → Eligibility: Inactive
   - "Patient not found" → Eligibility: Not Found
+
+---
+
+### NODE: Eligibility: Service Covered
+- **Type**: Default Node
+- **Prompt**: "{{patient_name}} IS active on the {{plan_name}} plan. {{service_type}} IS covered. Copay: ${{service_copay}}. Coinsurance: {{service_coinsurance}}%. Prior authorization required: {{service_prior_auth}}. Visit limit: {{service_visit_limit}}. {{service_notes}}. Deductible: ${{deductible}} with ${{deductible_met}} met so far. Is there anything else I can help you with?"
+- **Rules**:
+  - Only read out fields that have values. If copay is null, skip it. If coinsurance is null, skip it. Same for visit_limit and notes.
+  - Pronounce dollar amounts naturally.
+  - For prior_auth, say "Prior authorization IS required" or "No prior authorization needed."
+- **Pathways**:
+  - "Caller wants to check another service for the same patient" → Eligibility: Collect Service
+  - "Caller wants to check another patient" → Eligibility: Collect Patient Info
+  - "Caller is done" → End Call
+  - "Caller wants to check a claim" → Claims: Collect Patient Info
+
+---
+
+### NODE: Eligibility: Service Not Covered
+- **Type**: Default Node
+- **Prompt**: "{{patient_name}} IS active on the {{plan_name}} plan, however {{service_type}} is NOT covered under this plan. {{service_notes}}. Would you like me to check a different service, or transfer you to a team member for more details?"
+- **Pathways**:
+  - "Caller wants to check a different service" → Eligibility: Collect Service
+  - "Caller wants transfer" → Transfer to Human
+  - "Caller is done" → End Call
 
 ---
 
@@ -155,9 +203,9 @@ Rules:
 - **Prompt**: "I wasn't able to find that patient. Do you have their Member ID? I can try looking them up that way."
 - **Extract Variables**:
   - `member_id` (string): Description: "The member ID, typically in format MBR-XXXXXX"
-- **Webhook**: Call `LookupEligibility` tool with member_id
+- **Webhook**: Call `LookupEligibility` tool with member_id, service_type
 - **Pathways**:
-  - "Patient found" → Eligibility: Active or Inactive based on status
+  - "Patient found" → Route based on service_covered (Service Covered, Service Not Covered, or Active)
   - "Still not found" → Transfer to Human
 
 ---

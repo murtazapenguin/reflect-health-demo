@@ -54,6 +54,7 @@ async def api_eligibility(request: Request):
         patient_name=data.get("patient_name"),
         patient_dob=data.get("patient_dob"),
         member_id=data.get("member_id"),
+        service_type=data.get("service_type"),
     )
 
 

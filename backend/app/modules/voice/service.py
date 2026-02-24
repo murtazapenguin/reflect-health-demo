@@ -106,6 +106,71 @@ LETTER_SOUND_MAP = {
     "zee": "z", "zed": "z",
 }
 
+SERVICE_ALIASES = {
+    "primary care": "primary_care", "pcp": "primary_care", "pcp visit": "primary_care",
+    "office visit": "primary_care", "doctor visit": "primary_care", "checkup": "primary_care",
+    "annual physical": "primary_care", "wellness visit": "primary_care",
+    "specialist": "specialist_visit", "specialist visit": "specialist_visit",
+    "referral": "specialist_visit", "consultation": "specialist_visit",
+    "urgent care": "urgent_care", "walk-in": "urgent_care", "walk in": "urgent_care",
+    "emergency": "emergency_room", "emergency room": "emergency_room", "er": "emergency_room",
+    "er visit": "emergency_room", "e.r.": "emergency_room",
+    "lab": "lab_work", "labs": "lab_work", "lab work": "lab_work", "blood work": "lab_work",
+    "bloodwork": "lab_work", "blood test": "lab_work", "laboratory": "lab_work",
+    "x-ray": "xray", "xray": "xray", "x ray": "xray",
+    "mri": "mri", "m.r.i.": "mri", "magnetic resonance": "mri",
+    "ct scan": "ct_scan", "ct": "ct_scan", "cat scan": "ct_scan", "c.t.": "ct_scan",
+    "physical therapy": "physical_therapy", "pt": "physical_therapy", "physio": "physical_therapy",
+    "physiotherapy": "physical_therapy", "rehab": "physical_therapy", "rehabilitation": "physical_therapy",
+    "mental health": "mental_health", "counseling": "mental_health", "therapy": "mental_health",
+    "behavioral health": "mental_health", "psychiatry": "mental_health", "psychologist": "mental_health",
+    "therapist": "mental_health",
+    "chiropractic": "chiropractic", "chiropractor": "chiropractic", "chiro": "chiropractic",
+    "outpatient surgery": "surgery_outpatient", "ambulatory surgery": "surgery_outpatient",
+    "day surgery": "surgery_outpatient",
+    "inpatient surgery": "surgery_inpatient", "hospital surgery": "surgery_inpatient",
+    "surgery": "surgery_outpatient",
+    "generic prescription": "prescription_generic", "generic": "prescription_generic",
+    "generic drug": "prescription_generic", "generic medication": "prescription_generic",
+    "brand prescription": "prescription_brand", "brand name": "prescription_brand",
+    "brand drug": "prescription_brand", "brand medication": "prescription_brand",
+    "prescription": "prescription_generic", "medication": "prescription_generic",
+    "rx": "prescription_generic",
+}
+
+SERVICE_DISPLAY_NAMES = {
+    "primary_care": "Primary Care Visit",
+    "specialist_visit": "Specialist Visit",
+    "urgent_care": "Urgent Care",
+    "emergency_room": "Emergency Room",
+    "lab_work": "Lab Work / Blood Tests",
+    "xray": "X-Ray",
+    "mri": "MRI",
+    "ct_scan": "CT Scan",
+    "physical_therapy": "Physical Therapy",
+    "mental_health": "Mental / Behavioral Health",
+    "chiropractic": "Chiropractic Care",
+    "surgery_outpatient": "Outpatient Surgery",
+    "surgery_inpatient": "Inpatient Surgery",
+    "prescription_generic": "Prescription (Generic)",
+    "prescription_brand": "Prescription (Brand Name)",
+}
+
+
+def _normalize_service(raw: str) -> Optional[str]:
+    """Map a spoken service description to a canonical service key."""
+    if not raw:
+        return None
+    lower = raw.strip().lower()
+    # Exact match first
+    if lower in SERVICE_ALIASES:
+        return SERVICE_ALIASES[lower]
+    # Substring match -- longest alias first to avoid partial mismatches
+    for alias in sorted(SERVICE_ALIASES.keys(), key=len, reverse=True):
+        if alias in lower:
+            return SERVICE_ALIASES[alias]
+    return None
+
 
 def _normalize_dob(raw: str) -> Optional[str]:
     """Parse spoken/typed DOB into YYYY-MM-DD. Returns None if unparseable."""
@@ -333,6 +398,7 @@ async def lookup_eligibility(
     patient_name: Optional[str] = None,
     patient_dob: Optional[str] = None,
     member_id: Optional[str] = None,
+    service_type: Optional[str] = None,
 ) -> EligibilityResponse:
     if not patient_name and not member_id:
         logger.info("Eligibility lookup missing patient_name and member_id")
@@ -343,7 +409,7 @@ async def lookup_eligibility(
     if member_id:
         member = await Member.find_one(Member.member_id == member_id.strip().upper())
         if member:
-            return _member_to_eligibility(member)
+            return _member_to_eligibility(member, service_type)
         return EligibilityResponse(
             found=False,
             message=f"No member found with ID {member_id}.",
@@ -361,14 +427,16 @@ async def lookup_eligibility(
         )
 
     if len(members) == 1:
-        return _member_to_eligibility(members[0])
+        return _member_to_eligibility(members[0], service_type)
 
     logger.warning("Multiple member matches for {} / {}: {}", patient_name, patient_dob, len(members))
-    return _member_to_eligibility(members[0])
+    return _member_to_eligibility(members[0], service_type)
 
 
-def _member_to_eligibility(member: Member) -> EligibilityResponse:
-    return EligibilityResponse(
+def _member_to_eligibility(
+    member: Member, service_type: Optional[str] = None
+) -> EligibilityResponse:
+    resp = EligibilityResponse(
         found=True,
         status=member.status,
         member_id=member.member_id,
@@ -384,6 +452,33 @@ def _member_to_eligibility(member: Member) -> EligibilityResponse:
         out_of_pocket_max=member.out_of_pocket_max,
         out_of_pocket_met=member.out_of_pocket_met,
     )
+
+    if service_type:
+        svc_key = _normalize_service(service_type)
+        logger.info("Service lookup: raw='{}' normalized='{}'", service_type, svc_key)
+        if svc_key and member.benefits:
+            benefit = member.benefits.get(svc_key)
+            if benefit:
+                resp.service_type = SERVICE_DISPLAY_NAMES.get(svc_key, svc_key)
+                resp.service_covered = benefit.covered
+                resp.service_copay = benefit.copay
+                resp.service_coinsurance = benefit.coinsurance
+                resp.service_prior_auth = benefit.prior_auth_required
+                resp.service_visit_limit = benefit.visit_limit
+                resp.service_notes = benefit.notes
+            else:
+                resp.service_type = service_type
+                resp.service_covered = None
+                resp.message = f"Service '{service_type}' is not a recognized benefit category for this plan."
+        elif svc_key and not member.benefits:
+            resp.service_type = service_type
+            resp.message = "Benefit details are not available for this member's plan."
+        else:
+            resp.service_type = service_type
+            resp.service_covered = None
+            resp.message = f"Could not identify the service '{service_type}'. Please try a more specific term."
+
+    return resp
 
 
 async def lookup_claims(

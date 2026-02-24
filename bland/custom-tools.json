@@ -63,7 +63,7 @@
     },
     {
       "name": "LookupEligibility",
-      "description": "Looks up a patient's eligibility/coverage information. Call this after collecting the patient name and date of birth.",
+      "description": "Looks up a patient's eligibility/coverage information and service-specific benefits. Call this after collecting the patient name, date of birth, and the service they are checking coverage for.",
       "url": "YOUR_BACKEND_URL/api/v1/voice/eligibility",
       "method": "POST",
       "headers": {
@@ -73,7 +73,8 @@
         "npi": "{{input.npi}}",
         "patient_name": "{{input.patient_name}}",
         "patient_dob": "{{input.patient_dob}}",
-        "member_id": "{{input.member_id}}"
+        "member_id": "{{input.member_id}}",
+        "service_type": "{{input.service_type}}"
       },
       "input_schema": {
         "example": {
@@ -81,7 +82,8 @@
           "npi": "1234567890",
           "patient_name": "John Smith",
           "patient_dob": "1982-03-04",
-          "member_id": ""
+          "member_id": "",
+          "service_type": "MRI"
         },
         "type": "object",
         "properties": {
@@ -89,11 +91,13 @@
           "npi": "string - the authenticated provider's NPI",
           "patient_name": "string - patient's first and last name",
           "patient_dob": "YYYY-MM-DD - patient's date of birth",
-          "member_id": "string - optional member ID if name lookup failed"
+          "member_id": "string - optional member ID if name lookup failed",
+          "service_type": "string - the medical service or procedure to check coverage for (e.g., MRI, physical therapy, lab work)"
         }
       },
       "response": {
         "found": "$.found",
+        "message": "$.message",
         "status": "$.status",
         "member_id": "$.member_id",
         "patient_name": "$.patient_name",
@@ -106,7 +110,14 @@
         "deductible_met": "$.deductible_met",
         "cob_status": "$.cob_status",
         "out_of_pocket_max": "$.out_of_pocket_max",
-        "out_of_pocket_met": "$.out_of_pocket_met"
+        "out_of_pocket_met": "$.out_of_pocket_met",
+        "service_type": "$.service_type",
+        "service_covered": "$.service_covered",
+        "service_copay": "$.service_copay",
+        "service_coinsurance": "$.service_coinsurance",
+        "service_prior_auth": "$.service_prior_auth",
+        "service_visit_limit": "$.service_visit_limit",
+        "service_notes": "$.service_notes"
       }
     },
     {

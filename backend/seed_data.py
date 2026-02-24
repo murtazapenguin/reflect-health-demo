@@ -135,6 +135,62 @@ PROVIDERS = [
     },
 ]
 
+# ---------- PLAN BENEFITS ----------
+
+PLAN_BENEFITS = {
+    "Reflect Gold PPO": {
+        "primary_care": {"covered": True, "copay": 20, "prior_auth_required": False},
+        "specialist_visit": {"covered": True, "copay": 50, "prior_auth_required": False},
+        "urgent_care": {"covered": True, "copay": 75, "prior_auth_required": False},
+        "emergency_room": {"covered": True, "copay": 250, "prior_auth_required": False, "notes": "Waived if admitted"},
+        "lab_work": {"covered": True, "copay": 0, "prior_auth_required": False, "notes": "Covered at 100% in-network"},
+        "xray": {"covered": True, "copay": 25, "prior_auth_required": False},
+        "mri": {"covered": True, "copay": 150, "prior_auth_required": False},
+        "ct_scan": {"covered": True, "copay": 150, "prior_auth_required": False},
+        "physical_therapy": {"covered": True, "copay": 40, "prior_auth_required": False, "visit_limit": "40 visits/year"},
+        "mental_health": {"covered": True, "copay": 30, "prior_auth_required": False, "visit_limit": "52 visits/year"},
+        "chiropractic": {"covered": True, "copay": 40, "prior_auth_required": False, "visit_limit": "24 visits/year"},
+        "surgery_outpatient": {"covered": True, "coinsurance": 20, "prior_auth_required": True},
+        "surgery_inpatient": {"covered": True, "coinsurance": 20, "prior_auth_required": True, "notes": "$500 facility copay"},
+        "prescription_generic": {"covered": True, "copay": 10, "prior_auth_required": False},
+        "prescription_brand": {"covered": True, "copay": 40, "prior_auth_required": False},
+    },
+    "Reflect Silver HMO": {
+        "primary_care": {"covered": True, "copay": 30, "prior_auth_required": False},
+        "specialist_visit": {"covered": True, "copay": 65, "prior_auth_required": True, "notes": "PCP referral required"},
+        "urgent_care": {"covered": True, "copay": 100, "prior_auth_required": False},
+        "emergency_room": {"covered": True, "copay": 350, "prior_auth_required": False, "notes": "Waived if admitted"},
+        "lab_work": {"covered": True, "copay": 10, "prior_auth_required": False},
+        "xray": {"covered": True, "copay": 40, "prior_auth_required": False},
+        "mri": {"covered": True, "coinsurance": 30, "prior_auth_required": True},
+        "ct_scan": {"covered": True, "coinsurance": 30, "prior_auth_required": True},
+        "physical_therapy": {"covered": True, "copay": 50, "prior_auth_required": True, "visit_limit": "20 visits/year"},
+        "mental_health": {"covered": True, "copay": 40, "prior_auth_required": False, "visit_limit": "30 visits/year"},
+        "chiropractic": {"covered": False, "notes": "Not covered under HMO plan"},
+        "surgery_outpatient": {"covered": True, "coinsurance": 30, "prior_auth_required": True},
+        "surgery_inpatient": {"covered": True, "coinsurance": 30, "prior_auth_required": True, "notes": "$750 facility copay"},
+        "prescription_generic": {"covered": True, "copay": 15, "prior_auth_required": False},
+        "prescription_brand": {"covered": True, "copay": 60, "prior_auth_required": True},
+    },
+    "Reflect Platinum PPO": {
+        "primary_care": {"covered": True, "copay": 10, "prior_auth_required": False},
+        "specialist_visit": {"covered": True, "copay": 30, "prior_auth_required": False},
+        "urgent_care": {"covered": True, "copay": 50, "prior_auth_required": False},
+        "emergency_room": {"covered": True, "copay": 150, "prior_auth_required": False, "notes": "Waived if admitted"},
+        "lab_work": {"covered": True, "copay": 0, "prior_auth_required": False, "notes": "Covered at 100%"},
+        "xray": {"covered": True, "copay": 0, "prior_auth_required": False},
+        "mri": {"covered": True, "copay": 75, "prior_auth_required": False},
+        "ct_scan": {"covered": True, "copay": 75, "prior_auth_required": False},
+        "physical_therapy": {"covered": True, "copay": 25, "prior_auth_required": False, "visit_limit": "60 visits/year"},
+        "mental_health": {"covered": True, "copay": 20, "prior_auth_required": False, "visit_limit": "Unlimited"},
+        "chiropractic": {"covered": True, "copay": 25, "prior_auth_required": False, "visit_limit": "36 visits/year"},
+        "surgery_outpatient": {"covered": True, "coinsurance": 10, "prior_auth_required": True},
+        "surgery_inpatient": {"covered": True, "coinsurance": 10, "prior_auth_required": True, "notes": "$250 facility copay"},
+        "prescription_generic": {"covered": True, "copay": 5, "prior_auth_required": False},
+        "prescription_brand": {"covered": True, "copay": 25, "prior_auth_required": False},
+    },
+}
+
 # ---------- MEMBERS ----------
 
 MEMBERS = [
@@ -367,7 +423,8 @@ async def seed():
     # Seed members
     print(f"Seeding {len(MEMBERS)} members...")
     for m in MEMBERS:
-        await Member(**m).insert()
+        plan_benefits = PLAN_BENEFITS.get(m["plan_name"], {})
+        await Member(**m, benefits=plan_benefits).insert()
 
     # Seed claims
     print(f"Seeding {len(CLAIMS)} claims...")

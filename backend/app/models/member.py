@@ -1,7 +1,16 @@
-from typing import Optional
+from typing import Dict, Optional
 
 from beanie import Document, Indexed
-from pydantic import Field
+from pydantic import BaseModel, Field
+
+
+class ServiceBenefit(BaseModel):
+    covered: bool = True
+    copay: Optional[int] = None
+    coinsurance: Optional[int] = None
+    prior_auth_required: bool = False
+    visit_limit: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class Member(Document):
@@ -20,6 +29,7 @@ class Member(Document):
     cob_status: str = "primary"
     out_of_pocket_max: int = 0
     out_of_pocket_met: int = 0
+    benefits: Dict[str, ServiceBenefit] = Field(default_factory=dict)
 
     class Settings:
         name = "members"
