@@ -6,6 +6,7 @@ from loguru import logger
 from app.models.claim import Claim
 from app.models.member import Member
 from app.models.provider import Provider
+from app.modules.voice.cms_client import lookup_npi_from_cms
 from app.modules.voice.schemas import (
     AuthenticateNPIResponse,
     ClaimsResponse,
@@ -280,10 +281,19 @@ async def authenticate_npi(npi: Optional[str] = None) -> AuthenticateNPIResponse
     logger.info("NPI raw='{}' normalized='{}'", npi, npi_clean)
     if not npi_clean:
         return AuthenticateNPIResponse(valid=False)
+
     provider = await Provider.find_one(Provider.npi == npi_clean)
+
     if provider is None:
-        logger.info("NPI lookup failed: {}", npi_clean)
-        return AuthenticateNPIResponse(valid=False)
+        logger.info("NPI {} not in local DB, querying CMS API...", npi_clean)
+        cms_data = await lookup_npi_from_cms(npi_clean)
+        if cms_data:
+            provider = Provider(npi=npi_clean, **cms_data)
+            await provider.insert()
+            logger.info("Cached CMS provider: {} ({})", provider.name, npi_clean)
+        else:
+            logger.info("NPI {} not found in CMS either", npi_clean)
+            return AuthenticateNPIResponse(valid=False)
 
     return AuthenticateNPIResponse(
         valid=True,
@@ -306,9 +316,15 @@ async def verify_zip(npi: Optional[str] = None, zip_code: Optional[str] = None) 
     if provider is None:
         return VerifyZipResponse(verified=False)
 
-    if provider.zip_code == zip_clean:
+    known_zips = set()
+    known_zips.add(provider.zip_code)
+    if provider.zip_codes:
+        known_zips.update(provider.zip_codes)
+
+    if zip_clean in known_zips:
         return VerifyZipResponse(verified=True, provider_name=provider.name)
 
+    logger.info("Zip {} not in known zips {} for NPI {}", zip_clean, known_zips, npi_clean)
     return VerifyZipResponse(verified=False)
 
 
