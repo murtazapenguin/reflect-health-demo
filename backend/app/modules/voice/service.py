@@ -1,5 +1,5 @@
 import re
-from typing import Optional
+from typing import List, Optional
 
 from loguru import logger
 
@@ -25,6 +25,177 @@ WORD_TO_DIGIT = {
     "eight": "8",
     "nine": "9", "niner": "9",
 }
+
+ORDINAL_TO_NUM = {
+    "first": "1", "second": "2", "third": "3", "fourth": "4", "fifth": "5",
+    "sixth": "6", "seventh": "7", "eighth": "8", "ninth": "9", "tenth": "10",
+    "eleventh": "11", "twelfth": "12", "thirteenth": "13", "fourteenth": "14",
+    "fifteenth": "15", "sixteenth": "16", "seventeenth": "17", "eighteenth": "18",
+    "nineteenth": "19", "twentieth": "20", "twenty-first": "21", "twenty-second": "22",
+    "twenty-third": "23", "twenty-fourth": "24", "twenty-fifth": "25",
+    "twenty-sixth": "26", "twenty-seventh": "27", "twenty-eighth": "28",
+    "twenty-ninth": "29", "thirtieth": "30", "thirty-first": "31",
+}
+
+MONTH_MAP = {
+    "january": "01", "february": "02", "march": "03", "april": "04",
+    "may": "05", "june": "06", "july": "07", "august": "08",
+    "september": "09", "october": "10", "november": "11", "december": "12",
+    "jan": "01", "feb": "02", "mar": "03", "apr": "04",
+    "jun": "06", "jul": "07", "aug": "08", "sep": "09",
+    "oct": "10", "nov": "11", "dec": "12",
+}
+
+NICKNAME_MAP = {
+    "bob": "robert", "bobby": "robert", "rob": "robert",
+    "bill": "william", "billy": "william", "will": "william",
+    "mike": "michael", "mikey": "michael",
+    "pat": "patricia", "patty": "patricia",
+    "tom": "thomas", "tommy": "thomas",
+    "sue": "susan", "suzy": "susan",
+    "dave": "david",
+    "liz": "elizabeth", "beth": "elizabeth", "lizzy": "elizabeth",
+    "jim": "james", "jimmy": "james", "jamie": "james",
+    "jen": "jennifer", "jenny": "jennifer",
+    "dan": "daniel", "danny": "daniel",
+    "dick": "richard", "rick": "richard", "rich": "richard",
+    "joe": "joseph", "joey": "joseph",
+    "chris": "christopher",
+    "matt": "matthew", "matty": "matthew",
+    "nick": "nicholas",
+    "steve": "steven", "stevie": "steven",
+    "tony": "anthony",
+    "chuck": "charles", "charlie": "charles",
+    "larry": "lawrence",
+    "terry": "terence",
+    "debbie": "deborah", "deb": "deborah",
+    "kathy": "katherine", "kate": "katherine", "katie": "katherine",
+    "maggie": "margaret", "meg": "margaret", "peggy": "margaret",
+    "nancy": "ann",
+    "sandy": "sandra",
+}
+
+
+def _normalize_dob(raw: str) -> Optional[str]:
+    """Parse spoken/typed DOB into YYYY-MM-DD. Returns None if unparseable."""
+    if not raw:
+        return None
+    cleaned = raw.strip()
+    logger.info("DOB normalize: raw='{}'", cleaned)
+
+    # Already ISO: 1982-03-04
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", cleaned):
+        return cleaned
+
+    # US numeric: MM/DD/YYYY or MM-DD-YYYY or MM.DD.YYYY
+    m = re.match(r"^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})$", cleaned)
+    if m:
+        month, day, year = m.group(1), m.group(2), m.group(3)
+        if len(year) == 2:
+            year = ("19" if int(year) > 30 else "20") + year
+        return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+
+    # Spoken month format: "March 4th 1982", "mar 4, 1982", "March fourth 1982"
+    lower = cleaned.lower()
+    lower = re.sub(r"[,.]", " ", lower)
+    lower = re.sub(r"\s+", " ", lower).strip()
+
+    for month_name, month_num in sorted(MONTH_MAP.items(), key=lambda x: -len(x[0])):
+        if month_name in lower:
+            rest = lower.replace(month_name, "").strip()
+            tokens = rest.split()
+            day_str = None
+            year_str = None
+            for tok in tokens:
+                tok_clean = re.sub(r"(st|nd|rd|th)$", "", tok)
+                if tok_clean in ORDINAL_TO_NUM:
+                    day_str = ORDINAL_TO_NUM[tok_clean]
+                elif tok in ORDINAL_TO_NUM:
+                    day_str = ORDINAL_TO_NUM[tok]
+                elif tok_clean in WORD_TO_DIGIT:
+                    if not day_str:
+                        day_str = WORD_TO_DIGIT[tok_clean]
+                elif tok_clean.isdigit():
+                    num = int(tok_clean)
+                    if num > 31:
+                        year_str = tok_clean
+                    elif not day_str:
+                        day_str = tok_clean
+                    else:
+                        year_str = tok_clean
+
+            if day_str and year_str:
+                if len(year_str) == 2:
+                    year_str = ("19" if int(year_str) > 30 else "20") + year_str
+                return f"{year_str}-{month_num}-{day_str.zfill(2)}"
+            break
+
+    logger.warning("DOB normalize failed for: '{}'", raw)
+    return None
+
+
+def _fuzzy_name_query(patient_name: str) -> Optional[dict]:
+    """Build a MongoDB query that handles name variations from STT."""
+    if not patient_name:
+        return None
+    parts = patient_name.strip().split()
+    if len(parts) < 2:
+        return None
+
+    first_raw = parts[0].lower().rstrip(".")
+    last_raw = parts[-1].lower()
+
+    # Last name: exact case-insensitive (reliable from STT)
+    query = {"last_name": {"$regex": f"^{re.escape(last_raw)}$", "$options": "i"}}
+
+    # First name: build alternatives
+    first_options = [re.escape(first_raw)]
+
+    # Add canonical name if input is a nickname
+    if first_raw in NICKNAME_MAP:
+        first_options.append(re.escape(NICKNAME_MAP[first_raw]))
+
+    # Add nicknames if input is the canonical name (reverse lookup)
+    for nick, canonical in NICKNAME_MAP.items():
+        if canonical == first_raw and nick not in first_options:
+            first_options.append(re.escape(nick))
+
+    if len(first_raw) == 1:
+        # Single initial: match any name starting with that letter
+        query["first_name"] = {"$regex": f"^{re.escape(first_raw)}", "$options": "i"}
+    else:
+        # Match exact OR any alternative (nickname/canonical)
+        pattern = "|".join(f"^{opt}$" for opt in first_options)
+        query["first_name"] = {"$regex": pattern, "$options": "i"}
+
+    logger.info("Fuzzy name query: input='{}' -> {}", patient_name, query)
+    return query
+
+
+async def _find_members_fuzzy(
+    patient_name: Optional[str],
+    patient_dob: Optional[str],
+) -> List[Member]:
+    """Find members with fuzzy name matching and normalized DOB, with fallback."""
+    query = _fuzzy_name_query(patient_name)
+    if not query:
+        return []
+
+    dob_normalized = _normalize_dob(patient_dob) if patient_dob else None
+
+    # Try with DOB first for precise match
+    if dob_normalized:
+        query_with_dob = {**query, "dob": dob_normalized}
+        members = await Member.find(query_with_dob).to_list()
+        if members:
+            logger.info("Fuzzy match with DOB found {} members", len(members))
+            return members
+
+    # Fallback: name-only match (no DOB or DOB didn't match)
+    members = await Member.find(query).to_list()
+    if members:
+        logger.info("Fuzzy match name-only found {} members (DOB was '{}')", len(members), patient_dob)
+    return members
 
 
 def _normalize_digits(raw: str) -> str:
@@ -124,22 +295,7 @@ async def lookup_eligibility(
         if member:
             return _member_to_eligibility(member)
 
-    name_parts = patient_name.strip().lower().split()
-    if len(name_parts) < 2:
-        return EligibilityResponse(found=False)
-
-    first_name = name_parts[0]
-    last_name = name_parts[-1]
-
-    query = {
-        "first_name": {"$regex": f"^{first_name}$", "$options": "i"},
-        "last_name": {"$regex": f"^{last_name}$", "$options": "i"},
-    }
-    if patient_dob:
-        dob_clean = patient_dob.strip()
-        query["dob"] = dob_clean
-
-    members = await Member.find(query).to_list()
+    members = await _find_members_fuzzy(patient_name, patient_dob)
 
     if len(members) == 0:
         logger.info("Eligibility lookup failed: {} / {}", patient_name, patient_dob)
@@ -148,7 +304,6 @@ async def lookup_eligibility(
     if len(members) == 1:
         return _member_to_eligibility(members[0])
 
-    # Multiple matches -- return first but log
     logger.warning("Multiple member matches for {} / {}: {}", patient_name, patient_dob, len(members))
     return _member_to_eligibility(members[0])
 
@@ -194,29 +349,19 @@ async def lookup_claims(
                 return _claim_to_response(claim)
 
     if patient_name:
-        name_parts = patient_name.strip().lower().split()
-        logger.info("Claims patient lookup: name_parts={} dob={}", name_parts, patient_dob)
-        if len(name_parts) >= 2:
-            first_name = name_parts[0]
-            last_name = name_parts[-1]
-            member_query = {
-                "first_name": {"$regex": f"^{first_name}$", "$options": "i"},
-                "last_name": {"$regex": f"^{last_name}$", "$options": "i"},
-            }
-            if patient_dob:
-                member_query["dob"] = patient_dob.strip()
+        logger.info("Claims patient lookup: name='{}' dob='{}'", patient_name, patient_dob)
+        members = await _find_members_fuzzy(patient_name, patient_dob)
+        logger.info("Claims member search found {} members: {}", len(members), [m.member_id for m in members])
+        if members:
+            member_ids = [m.member_id for m in members]
+            claim_query = {"member_id": {"$in": member_ids}}
+            if date_of_service:
+                dos_normalized = _normalize_dob(date_of_service)
+                claim_query["date_of_service"] = dos_normalized or date_of_service.strip()
 
-            members = await Member.find(member_query).to_list()
-            logger.info("Claims member search found {} members: {}", len(members), [m.member_id for m in members])
-            if members:
-                member_ids = [m.member_id for m in members]
-                claim_query = {"member_id": {"$in": member_ids}}
-                if date_of_service:
-                    claim_query["date_of_service"] = date_of_service.strip()
-
-                claims = await Claim.find(claim_query).sort("-date_of_service").to_list()
-                if claims:
-                    return _claim_to_response(claims[0])
+            claims = await Claim.find(claim_query).sort("-date_of_service").to_list()
+            if claims:
+                return _claim_to_response(claims[0])
 
     logger.info("Claims lookup failed: claim={} name={} dos={}", claim_number, patient_name, date_of_service)
     return ClaimsResponse(found=False)
