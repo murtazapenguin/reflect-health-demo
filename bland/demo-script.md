@@ -12,10 +12,24 @@
 
 ## Demo Data for Live Calls
 
-**Provider credentials (for authentication):**
-- NPI: `1234567890`
-- Name: Dr. Sarah Chen
-- Zip code: `90210`
+**Provider credentials (for authentication) — REAL NPI:**
+- NPI: `1003045220` (verified via CMS national provider file)
+- Name: Dr. Jasleen Sohal
+- Practice: Walnut Creek Family Practice
+- Zip code: `94597`
+- Specialty: Family Practice
+- Location: Walnut Creek, CA
+
+> **Note:** This is a real NPI from CMS. Any real NPI will work — the backend
+> queries CMS and caches the provider. However, the CMS API is slow (~15-25s),
+> so these four NPIs are pre-loaded for instant auth:
+>
+> | NPI | Name | Zip | Specialty |
+> |-----|------|-----|-----------|
+> | `1003045220` | Dr. Jasleen Sohal | `94597` | Family Practice |
+> | `1003045683` | Dr. Kali Tileston | `95128` | Orthopedic Surgery |
+> | `1003044728` | Dr. Kyle Edmonds | `92103` | Palliative Care |
+> | `1003000126` | Dr. Ardalan Enkeshafi | `20032` | Hospitalist |
 
 **Patient for eligibility check:**
 - Name: John Smith
@@ -26,12 +40,14 @@
 **Claim for paid claim check:**
 - Claim number: CLM-00481922
 - Patient: John Smith
+- Provider: Dr. Jasleen Sohal (NPI 1003045220)
 - Status: Paid, $570 of $850 billed
 - Check: CHK-0018472
 
 **Claim for denied claim check:**
 - Claim number: CLM-00519833
 - Patient: John Smith
+- Provider: Dr. Jasleen Sohal (NPI 1003045220)
 - Status: Denied, CO-97 (not covered by plan)
 - Appeal deadline: July 24, 2026
 
@@ -56,11 +72,12 @@
 1. Call the Bland inbound number
 2. AI answers: "Thank you for calling Reflect Health..."
 3. Say: "I need to check if a patient has coverage"
-4. AI asks for NPI → Say: "1234567890"
-5. AI asks for zip → Say: "90210"
-6. AI confirms: "Dr. Chen" → confirms
+4. AI asks for NPI → Say: "1003045220"
+5. AI asks for zip → Say: "94597"
+6. AI confirms: "Dr. Sohal" → confirms
 7. AI asks for patient info → Say: "John Smith, born March 4th, 1982"
-8. AI confirms the data and delivers eligibility info
+8. AI asks for service type → Say: "primary care" (or "MRI", "physical therapy", etc.)
+9. AI confirms the data and delivers eligibility info with service-specific coverage
 
 **After the call, switch to dashboard:**
 - Refresh the call log
@@ -73,7 +90,7 @@
 **On the phone:**
 1. Call the Bland inbound number again
 2. Say: "I need to check on a claim"
-3. Authenticate with same NPI + zip
+3. Authenticate with NPI "1003045220" + zip "94597"
 4. Say: "John Smith, March 4th 1982"
 5. Provide claim number: "CLM-00481922"
 6. AI delivers payment details

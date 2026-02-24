@@ -7,6 +7,7 @@ import {
   Bars3Icon,
   XMarkIcon,
   BellIcon,
+  CloudIcon,
 } from '@heroicons/react/24/outline'
 
 const DEMO_PHONE = '+1 (415) 909-5732'
@@ -19,6 +20,7 @@ const Layout = ({ user, onLogout }) => {
   const navItems = [
     { id: 'dashboard', name: 'Dashboard', icon: HomeIcon, path: '/dashboard' },
     { id: 'calls', name: 'Call Log', icon: PhoneIcon, path: '/calls' },
+    { id: 'five9', name: 'Five9 Integration', icon: CloudIcon, path: '/five9' },
   ]
 
   const isActive = (path) => location.pathname === path || (path === '/calls' && location.pathname.startsWith('/calls/'))
@@ -94,6 +96,7 @@ const Layout = ({ user, onLogout }) => {
               {location.pathname === '/dashboard' && 'Dashboard'}
               {location.pathname === '/calls' && 'Call Log'}
               {location.pathname.startsWith('/calls/') && location.pathname !== '/calls' && 'Call Detail'}
+              {location.pathname === '/five9' && 'Five9 Integration'}
             </h1>
             <div className="flex items-center space-x-4">
               <div className="hidden md:flex items-center gap-1 px-2.5 py-1 text-[10px] font-medium rounded reflect-gradient text-white">

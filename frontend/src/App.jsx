@@ -5,6 +5,7 @@ import Layout from './components/Layout'
 import Dashboard from './components/Dashboard'
 import CallLog from './components/CallLog'
 import CallDetail from './components/CallDetail'
+import Five9View from './components/Five9View'
 
 function AppRoutes() {
   const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('authToken'))
@@ -51,6 +52,7 @@ function AppRoutes() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/calls" element={<CallLog />} />
         <Route path="/calls/:callId" element={<CallDetail />} />
+        <Route path="/five9" element={<Five9View />} />
       </Route>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

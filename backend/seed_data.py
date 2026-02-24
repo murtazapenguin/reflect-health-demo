@@ -33,6 +33,52 @@ MONGODB_DB_NAME = os.environ.get("MONGODB_DB_NAME", "reflect_health")
 # ---------- PROVIDERS ----------
 
 PROVIDERS = [
+    # --- Real CMS-sourced providers (NPI verified via data.cms.gov) ---
+    {
+        "npi": "1003045220",
+        "name": "Dr. Jasleen Sohal",
+        "practice_name": "Walnut Creek Family Practice",
+        "zip_code": "94597",
+        "zip_codes": ["94597"],
+        "specialty": "Family Practice",
+        "city": "Walnut Creek",
+        "state": "CA",
+        "cms_sourced": True,
+    },
+    {
+        "npi": "1003045683",
+        "name": "Dr. Kali Tileston",
+        "practice_name": "San Jose Orthopedic Center",
+        "zip_code": "95128",
+        "zip_codes": ["95128"],
+        "specialty": "Orthopedic Surgery",
+        "city": "San Jose",
+        "state": "CA",
+        "cms_sourced": True,
+    },
+    {
+        "npi": "1003044728",
+        "name": "Dr. Kyle Edmonds",
+        "practice_name": "San Diego Palliative Care",
+        "zip_code": "92103",
+        "zip_codes": ["92103"],
+        "specialty": "Hospice/Palliative Care",
+        "city": "San Diego",
+        "state": "CA",
+        "cms_sourced": True,
+    },
+    {
+        "npi": "1003000126",
+        "name": "Dr. Ardalan Enkeshafi",
+        "practice_name": "Washington Hospitalist Group",
+        "zip_code": "20032",
+        "zip_codes": ["20032"],
+        "specialty": "Hospitalist",
+        "city": "Washington",
+        "state": "DC",
+        "cms_sourced": True,
+    },
+    # --- Demo-specific providers (fake NPI, kept for historical call data) ---
     {
         "npi": "1234567890",
         "name": "Dr. Sarah Chen",
@@ -227,9 +273,9 @@ MEMBERS = [
 # ---------- CLAIMS ----------
 
 CLAIMS = [
-    # Demo script claims
-    {"claim_number": "CLM-00481922", "member_id": "MBR-001234", "provider_npi": "1234567890", "date_of_service": "2025-11-15", "procedure_code": "99213", "procedure_desc": "Office visit, established patient", "status": "paid", "billed_amount": 850.00, "allowed_amount": 620.00, "paid_amount": 570.00, "patient_responsibility": 50.00, "check_number": "CHK-0018472", "process_date": "2025-12-01", "received_date": "2025-11-16", "denial_code": None, "denial_reason": None, "appeal_deadline": None},
-    {"claim_number": "CLM-00519833", "member_id": "MBR-001234", "provider_npi": "1234567890", "date_of_service": "2026-01-10", "procedure_code": "99215", "procedure_desc": "Office visit, high complexity", "status": "denied", "billed_amount": 1200.00, "allowed_amount": 0.00, "paid_amount": 0.00, "patient_responsibility": 0.00, "check_number": None, "process_date": "2026-01-25", "received_date": "2026-01-11", "denial_code": "CO-97", "denial_reason": "Payment adjusted — service not covered by this plan benefit", "appeal_deadline": "2026-07-24"},
+    # Demo script claims — linked to real NPI (Dr. Jasleen Sohal)
+    {"claim_number": "CLM-00481922", "member_id": "MBR-001234", "provider_npi": "1003045220", "date_of_service": "2025-11-15", "procedure_code": "99213", "procedure_desc": "Office visit, established patient", "status": "paid", "billed_amount": 850.00, "allowed_amount": 620.00, "paid_amount": 570.00, "patient_responsibility": 50.00, "check_number": "CHK-0018472", "process_date": "2025-12-01", "received_date": "2025-11-16", "denial_code": None, "denial_reason": None, "appeal_deadline": None},
+    {"claim_number": "CLM-00519833", "member_id": "MBR-001234", "provider_npi": "1003045220", "date_of_service": "2026-01-10", "procedure_code": "99215", "procedure_desc": "Office visit, high complexity", "status": "denied", "billed_amount": 1200.00, "allowed_amount": 0.00, "paid_amount": 0.00, "patient_responsibility": 0.00, "check_number": None, "process_date": "2026-01-25", "received_date": "2026-01-11", "denial_code": "CO-97", "denial_reason": "Payment adjusted — service not covered by this plan benefit", "appeal_deadline": "2026-07-24"},
     # Additional claims
     {"claim_number": "CLM-00482100", "member_id": "MBR-001235", "provider_npi": "2345678901", "date_of_service": "2025-10-20", "procedure_code": "99214", "procedure_desc": "Office visit, moderate complexity", "status": "paid", "billed_amount": 450.00, "allowed_amount": 380.00, "paid_amount": 315.00, "patient_responsibility": 65.00, "check_number": "CHK-0018501", "process_date": "2025-11-05", "received_date": "2025-10-21", "denial_code": None, "denial_reason": None, "appeal_deadline": None},
     {"claim_number": "CLM-00482200", "member_id": "MBR-001236", "provider_npi": "3456789012", "date_of_service": "2025-11-01", "procedure_code": "93000", "procedure_desc": "Electrocardiogram, 12-lead", "status": "paid", "billed_amount": 320.00, "allowed_amount": 280.00, "paid_amount": 230.00, "patient_responsibility": 50.00, "check_number": "CHK-0018520", "process_date": "2025-11-18", "received_date": "2025-11-02", "denial_code": None, "denial_reason": None, "appeal_deadline": None},
@@ -277,9 +323,9 @@ SAMPLE_TRANSCRIPTS = {
         {"speaker": "AI", "text": "Thank you for calling Reflect Health provider services. I'm an AI assistant and can help with patient eligibility verification or claim status inquiries. Which one brings you in today?"},
         {"speaker": "Provider", "text": "Hi, I need to check eligibility for a patient."},
         {"speaker": "AI", "text": "I'd be happy to help with that. To verify your identity, could you please provide your 10-digit National Provider Identifier?"},
-        {"speaker": "Provider", "text": "Sure, it's 1234567890."},
-        {"speaker": "AI", "text": "Thank you, Dr. Chen. To complete verification, could you confirm the zip code of your primary practice location?"},
-        {"speaker": "Provider", "text": "90210."},
+        {"speaker": "Provider", "text": "Sure, it's 1003045220."},
+        {"speaker": "AI", "text": "Thank you, Dr. Sohal. To complete verification, could you confirm the zip code of your primary practice location?"},
+        {"speaker": "Provider", "text": "94597."},
         {"speaker": "AI", "text": "You're verified. What is the patient's first and last name, and date of birth?"},
         {"speaker": "Provider", "text": "John Smith, date of birth March 4th, 1982."},
         {"speaker": "AI", "text": "I have John Smith, March 4th 1982. Let me look that up for you... John Smith IS active on the Reflect Gold PPO plan. Coverage effective January 1st 2025. Copay: $20 primary care, $50 specialist. Deductible: $1,500 with $420 met so far. Is there anything else I can help with?"},
@@ -290,9 +336,9 @@ SAMPLE_TRANSCRIPTS = {
         {"speaker": "AI", "text": "Thank you for calling Reflect Health provider services. I'm an AI assistant and can help with patient eligibility verification or claim status inquiries. Which one brings you in today?"},
         {"speaker": "Provider", "text": "I need to check on a claim status."},
         {"speaker": "AI", "text": "I can help with that. To verify your identity, could you please provide your 10-digit National Provider Identifier?"},
-        {"speaker": "Provider", "text": "2345678901."},
-        {"speaker": "AI", "text": "Thank you, Dr. Wilson. Could you confirm the zip code of your primary practice location?"},
-        {"speaker": "Provider", "text": "90245."},
+        {"speaker": "Provider", "text": "1003045683."},
+        {"speaker": "AI", "text": "Thank you, Dr. Tileston. Could you confirm the zip code of your primary practice location?"},
+        {"speaker": "Provider", "text": "95128."},
         {"speaker": "AI", "text": "You're verified. What is the patient's name and date of birth?"},
         {"speaker": "Provider", "text": "Mary Johnson, born August 15, 1975."},
         {"speaker": "AI", "text": "Do you have the claim number, or should I look it up by date of service?"},
