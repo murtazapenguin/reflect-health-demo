@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# MongoDB local data
+mongodb_local/
+
+# Binary tools
+bin/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Reference template (large, not needed in prod)
+penguinai-claude-artifacts-main/
+
+# Logs
+*.log
+logs/
+
+# OS
+Thumbs.db

@@ -1,0 +1,166 @@
+{
+  "_instructions": "These tool definitions are used in the Bland AI Conversational Pathway. Replace YOUR_BACKEND_URL with your actual backend URL (e.g., https://abc123.ngrok.io). Add these as Webhook nodes in the pathway builder or as custom tools.",
+
+  "tools": [
+    {
+      "name": "AuthenticateProvider",
+      "description": "Validates a provider's NPI number against the Reflect Health provider directory. Call this after the provider gives their NPI.",
+      "url": "YOUR_BACKEND_URL/api/v1/voice/authenticate-npi",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "npi": "{{input.npi}}"
+      },
+      "input_schema": {
+        "example": {
+          "speech": "Let me verify that NPI for you, one moment.",
+          "npi": "1234567890"
+        },
+        "type": "object",
+        "properties": {
+          "speech": "string - what to say while the tool runs",
+          "npi": "string - the 10-digit NPI number"
+        }
+      },
+      "response": {
+        "valid": "$.valid",
+        "provider_name": "$.provider_name",
+        "practice_name": "$.practice_name",
+        "fax_number": "$.fax_number"
+      }
+    },
+    {
+      "name": "VerifyZipCode",
+      "description": "Verifies the provider's zip code matches the NPI record. Call this after the provider confirms their zip code.",
+      "url": "YOUR_BACKEND_URL/api/v1/voice/verify-zip",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "npi": "{{input.npi}}",
+        "zip_code": "{{input.zip_code}}"
+      },
+      "input_schema": {
+        "example": {
+          "speech": "Let me verify that, one moment.",
+          "npi": "1234567890",
+          "zip_code": "90210"
+        },
+        "type": "object",
+        "properties": {
+          "speech": "string",
+          "npi": "string - the NPI from the previous step",
+          "zip_code": "string - the 5-digit zip code"
+        }
+      },
+      "response": {
+        "verified": "$.verified",
+        "provider_name": "$.provider_name"
+      }
+    },
+    {
+      "name": "LookupEligibility",
+      "description": "Looks up a patient's eligibility/coverage information. Call this after collecting the patient name and date of birth.",
+      "url": "YOUR_BACKEND_URL/api/v1/voice/eligibility",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "npi": "{{input.npi}}",
+        "patient_name": "{{input.patient_name}}",
+        "patient_dob": "{{input.patient_dob}}",
+        "member_id": "{{input.member_id}}"
+      },
+      "input_schema": {
+        "example": {
+          "speech": "Let me look that up for you.",
+          "npi": "1234567890",
+          "patient_name": "John Smith",
+          "patient_dob": "1982-03-04",
+          "member_id": ""
+        },
+        "type": "object",
+        "properties": {
+          "speech": "string",
+          "npi": "string - the authenticated provider's NPI",
+          "patient_name": "string - patient's first and last name",
+          "patient_dob": "YYYY-MM-DD - patient's date of birth",
+          "member_id": "string - optional member ID if name lookup failed"
+        }
+      },
+      "response": {
+        "found": "$.found",
+        "status": "$.status",
+        "member_id": "$.member_id",
+        "patient_name": "$.patient_name",
+        "plan_name": "$.plan_name",
+        "effective_date": "$.effective_date",
+        "term_date": "$.term_date",
+        "copay_primary": "$.copay_primary",
+        "copay_specialist": "$.copay_specialist",
+        "deductible": "$.deductible",
+        "deductible_met": "$.deductible_met",
+        "cob_status": "$.cob_status",
+        "out_of_pocket_max": "$.out_of_pocket_max",
+        "out_of_pocket_met": "$.out_of_pocket_met"
+      }
+    },
+    {
+      "name": "LookupClaim",
+      "description": "Looks up a claim by claim number or by patient + date of service. Call this after collecting claim information.",
+      "url": "YOUR_BACKEND_URL/api/v1/voice/claims",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "npi": "{{input.npi}}",
+        "claim_number": "{{input.claim_number}}",
+        "patient_name": "{{input.patient_name}}",
+        "patient_dob": "{{input.patient_dob}}",
+        "date_of_service": "{{input.date_of_service}}"
+      },
+      "input_schema": {
+        "example": {
+          "speech": "One moment while I look that up.",
+          "npi": "1234567890",
+          "claim_number": "CLM-00481922",
+          "patient_name": "John Smith",
+          "patient_dob": "1982-03-04",
+          "date_of_service": ""
+        },
+        "type": "object",
+        "properties": {
+          "speech": "string",
+          "npi": "string - the authenticated provider's NPI",
+          "claim_number": "string - the claim number (e.g. CLM-00481922)",
+          "patient_name": "string - patient name if no claim number",
+          "patient_dob": "YYYY-MM-DD - patient DOB",
+          "date_of_service": "YYYY-MM-DD - date of service if no claim number"
+        }
+      },
+      "response": {
+        "found": "$.found",
+        "claim_number": "$.claim_number",
+        "status": "$.status",
+        "date_of_service": "$.date_of_service",
+        "procedure_code": "$.procedure_code",
+        "procedure_desc": "$.procedure_desc",
+        "billed_amount": "$.billed_amount",
+        "allowed_amount": "$.allowed_amount",
+        "paid_amount": "$.paid_amount",
+        "patient_responsibility": "$.patient_responsibility",
+        "check_number": "$.check_number",
+        "process_date": "$.process_date",
+        "received_date": "$.received_date",
+        "denial_code": "$.denial_code",
+        "denial_reason": "$.denial_reason",
+        "appeal_deadline": "$.appeal_deadline"
+      }
+    }
+  ]
+}
