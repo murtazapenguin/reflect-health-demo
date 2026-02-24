@@ -19,15 +19,34 @@ router = APIRouter()
 
 
 async def _safe_json(request: Request) -> dict:
+    import json as _json
     try:
         body = await request.json()
         if isinstance(body, dict):
             return body
-        logger.warning("Voice API received non-dict body: {}", type(body))
+        # Bland sometimes double-encodes JSON as a string
+        if isinstance(body, str):
+            logger.info("Voice API received string body, attempting double-parse: {}", body[:300])
+            try:
+                parsed = _json.loads(body)
+                if isinstance(parsed, dict):
+                    return parsed
+            except (ValueError, TypeError):
+                pass
+        logger.warning("Voice API received non-dict body: {} value={}", type(body), str(body)[:300])
         return {}
     except Exception as e:
         raw = await request.body()
         logger.warning("Voice API JSON parse failed: {} body={}", e, raw[:500])
+        # Try raw bytes as double-encoded JSON
+        try:
+            parsed = _json.loads(raw)
+            if isinstance(parsed, str):
+                parsed = _json.loads(parsed)
+            if isinstance(parsed, dict):
+                return parsed
+        except (ValueError, TypeError):
+            pass
         return {}
 
 
