@@ -69,6 +69,8 @@ const Layout = ({ user, onLogout }) => {
           </div>
         )}
 
+        <div className="flex-1"></div>
+
         <div className={`p-3 border-t border-border ${sidebarCollapsed ? 'px-2' : ''}`}>
           {!sidebarCollapsed && (
             <div className="flex items-center justify-center gap-2 mb-3 opacity-60">
