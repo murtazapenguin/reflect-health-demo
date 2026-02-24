@@ -60,13 +60,13 @@ Rules:
 
 ### NODE: NPI Retry
 - **Type**: Wait for Response
-- **Prompt**: "I wasn't able to verify that NPI. Could you please try again? You can also provide your Tax Identification Number instead."
+- **Prompt**: "That didn't come through right. Could you give me the 10-digit NPI one more time?"
 - **Extract Variables**:
-  - `npi` (string): Description: "The NPI or TIN number provided on retry"
+  - `npi` (string): Description: "The NPI number provided on retry. Must be exactly 10 digits."
 - **Webhook**: Call `AuthenticateProvider` tool
 - **Pathways**:
-  - "NPI/TIN is valid" → Zip Code Verification
-  - "Second failure" → Transfer to Human
+  - "NPI is valid (webhook returned valid=true)" → Zip Code Verification
+  - "NPI is still invalid or not found" → Authentication Failure
 
 ---
 
@@ -85,13 +85,32 @@ Rules:
 
 ### NODE: Zip Retry
 - **Type**: Wait for Response
-- **Prompt**: "That zip code didn't match our records. Could you try again?"
+- **Prompt**: "Hmm, that zip code didn't match what we have on file. Could you try again?"
 - **Extract Variables**:
-  - `zip_code` (string)
+  - `zip_code` (string): Description: "The 5-digit zip code on retry"
 - **Webhook**: Call `VerifyZipCode` tool
 - **Pathways**:
   - "Zip code verified" → Route based on call_intent (Eligibility or Claims)
-  - "Second failure" → Transfer to Human
+  - "Zip code still doesn't match" → Authentication Failure
+
+---
+
+### NODE: Authentication Failure
+- **Type**: Wait for Response
+- **Prompt**: "I'm having trouble verifying your information, and I don't want to hold you up. I can connect you with a team member who can sort this out and get you where you need to go. Would you like me to transfer you now, or would you like to try one more time?"
+- **Extract Variables**:
+  - `npi` (string): Description: "A new NPI number if the caller wants to retry"
+  - `zip_code` (string): Description: "A new zip code if the caller wants to retry"
+- **Rules**:
+  - If the caller wants to try again with a new NPI, call `AuthenticateProvider` webhook. If valid, route to Zip Code Verification.
+  - If the caller wants to try again with a new zip code, call `VerifyZipCode` webhook. If valid, route based on call_intent.
+  - If the caller wants to be transferred, or if this is the third overall failure, transfer immediately.
+  - Do not cycle back to this node more than once — if the caller already visited Authentication Failure and still can't verify, go straight to Transfer to Human.
+- **Pathways**:
+  - "Caller retries NPI and it's valid" → Zip Code Verification
+  - "Caller retries zip code and it's valid" → Route based on call_intent (Eligibility or Claims)
+  - "Caller wants to be transferred" → Transfer to Human
+  - "Third failure or caller gives up" → Transfer to Human
 
 ---
 
