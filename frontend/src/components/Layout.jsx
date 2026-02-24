@@ -38,7 +38,7 @@ const Layout = ({ user, onLogout }) => {
           )}
         </div>
 
-        <nav className="mt-4 flex-1">
+        <nav className="mt-4">
           {navItems.map((item) => {
             const Icon = item.icon
             return (
@@ -57,7 +57,7 @@ const Layout = ({ user, onLogout }) => {
         </nav>
 
         {!sidebarCollapsed && (
-          <div className="px-4 py-3 border-t border-border">
+          <div className="px-4 py-3">
             <div className="bg-secondary rounded-2xl p-3">
               <div className="flex items-center gap-2 mb-1.5">
                 <PhoneIcon className="w-4 h-4 text-primary" />
@@ -68,6 +68,8 @@ const Layout = ({ user, onLogout }) => {
             </div>
           </div>
         )}
+
+        <div className="flex-1"></div>
 
         <div className={`p-3 border-t border-border ${sidebarCollapsed ? 'px-2' : ''}`}>
           {!sidebarCollapsed && (
