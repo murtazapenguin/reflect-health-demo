@@ -14,6 +14,7 @@ Usage:
 """
 
 import asyncio
+import os
 import random
 from datetime import datetime, timedelta, timezone
 
@@ -26,8 +27,8 @@ from app.models.member import Member
 from app.models.provider import Provider
 from app.models.user import User
 
-MONGODB_URL = "mongodb://localhost:27017"
-MONGODB_DB_NAME = "reflect_health"
+MONGODB_URL = os.environ.get("MONGODB_URL", "mongodb://localhost:27017")
+MONGODB_DB_NAME = os.environ.get("MONGODB_DB_NAME", "reflect_health")
 
 # ---------- PROVIDERS ----------
 

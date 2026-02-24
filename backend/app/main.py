@@ -26,7 +26,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Reflect Health AI Operations Center",
         description="Voice AI Call Deflection Demo - Admin Dashboard API",
-        docs_url="/docs" if settings.debug else None,
+        docs_url="/docs",
         redoc_url=None,
         lifespan=lifespan,
     )

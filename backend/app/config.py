@@ -1,12 +1,15 @@
+import os
 from functools import lru_cache
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_env_file = ".env" if os.path.isfile(".env") else None
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_env_file,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
