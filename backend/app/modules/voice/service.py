@@ -5,12 +5,14 @@ from loguru import logger
 
 from app.models.claim import Claim
 from app.models.member import Member
+from app.models.prior_auth import PriorAuth
 from app.models.provider import Provider
 from app.modules.voice.cms_client import lookup_npi_from_cms
 from app.modules.voice.schemas import (
     AuthenticateNPIResponse,
     ClaimsResponse,
     EligibilityResponse,
+    PriorAuthResponse,
     VerifyZipResponse,
 )
 
@@ -562,4 +564,91 @@ def _claim_to_response(claim: Claim) -> ClaimsResponse:
         denial_code=claim.denial_code,
         denial_reason=claim.denial_reason,
         appeal_deadline=claim.appeal_deadline,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Prior Authorization lookup
+# ---------------------------------------------------------------------------
+
+def _normalize_pa_id(raw: str) -> str:
+    """Normalize spoken PA IDs: 'P A dash 1 2 3 4 5' → 'PA-00012345'."""
+    cleaned = raw.strip().upper().replace(" ", "")
+    cleaned = re.sub(r"[^A-Z0-9\-]", "", cleaned)
+    if not cleaned.startswith("PA"):
+        digits = re.sub(r"[^0-9]", "", cleaned)
+        if digits:
+            cleaned = f"PA-{digits.zfill(8)}"
+    if cleaned.startswith("PA") and "-" not in cleaned:
+        cleaned = "PA-" + cleaned[2:]
+    parts = cleaned.split("-", 1)
+    if len(parts) == 2 and parts[1]:
+        cleaned = f"PA-{parts[1].zfill(8)}"
+    return cleaned
+
+
+async def lookup_prior_auth(
+    pa_id: Optional[str] = None,
+    member_id: Optional[str] = None,
+) -> PriorAuthResponse:
+    if pa_id:
+        pa_clean = _normalize_pa_id(pa_id)
+        logger.info("PA lookup raw='{}' normalized='{}'", pa_id, pa_clean)
+        pa = await PriorAuth.find_one(PriorAuth.pa_id == pa_clean)
+        if not pa:
+            digits = re.sub(r"[^0-9]", "", pa_clean)
+            if digits:
+                pa = await PriorAuth.find_one(
+                    {"pa_id": {"$regex": digits, "$options": "i"}}
+                )
+        if pa:
+            return await _pa_to_response(pa)
+        return PriorAuthResponse(
+            found=False,
+            message=f"No prior authorization found with ID '{pa_id}' (searched as '{pa_clean}').",
+        )
+
+    if member_id:
+        mid = member_id.strip().upper()
+        if not mid.startswith("MBR"):
+            mid = f"MBR-{mid.lstrip('-')}"
+        logger.info("PA lookup by member_id='{}'", mid)
+        pa = await PriorAuth.find_one(
+            PriorAuth.member_id == mid,
+            sort=[("submitted_date", -1)],
+        )
+        if pa:
+            return await _pa_to_response(pa)
+        return PriorAuthResponse(
+            found=False,
+            message=f"No prior authorization found for member '{mid}'.",
+        )
+
+    return PriorAuthResponse(
+        found=False,
+        message="Please provide a PA request ID or member ID.",
+    )
+
+
+async def _pa_to_response(pa: PriorAuth) -> PriorAuthResponse:
+    patient_name = None
+    member = await Member.find_one(Member.member_id == pa.member_id)
+    if member:
+        patient_name = f"{member.first_name} {member.last_name}"
+
+    return PriorAuthResponse(
+        found=True,
+        pa_id=pa.pa_id,
+        member_id=pa.member_id,
+        patient_name=patient_name,
+        service_description=pa.service_description,
+        procedure_code=pa.procedure_code,
+        status=pa.status,
+        urgency=pa.urgency,
+        submitted_date=pa.submitted_date,
+        decision_date=pa.decision_date,
+        expiration_date=pa.expiration_date,
+        approved_units=pa.approved_units,
+        denial_reason=pa.denial_reason,
+        notes=pa.notes,
     )

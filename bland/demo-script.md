@@ -51,6 +51,24 @@
 - Status: Denied, CO-97 (not covered by plan)
 - Appeal deadline: July 24, 2026
 
+**Prior auth for approved PA check:**
+- PA ID: PA-00012345
+- Patient: John Smith (MBR-001234)
+- Service: MRI Lumbar Spine (CPT 72148)
+- Status: Approved, 1 procedure, expires July 18, 2026
+
+**Prior auth for denied PA check:**
+- PA ID: PA-00012400
+- Patient: John Smith (MBR-001234)
+- Service: Knee Arthroscopy
+- Status: Denied — medical necessity not met
+
+**Prior auth pending:**
+- PA ID: PA-00012500
+- Patient: John Smith (MBR-001234)
+- Service: Physical Therapy (12 visits)
+- Status: Pending Review
+
 ---
 
 ## Demo Flow (15-20 minutes)
@@ -97,26 +115,42 @@
 
 **Key point:** "Notice the AI correctly pulled the exact payment amount, check number, and processing date — all from your data."
 
-### 4. Transfer Demo (2 min)
+### 4. Live Prior Auth Call (3 min)
+
+**Say:** "Now let's check on a prior authorization — another high-volume call type."
+
+**On the phone:**
+1. Call the Bland inbound number again
+2. Say: "I need to check on a prior authorization"
+3. Authenticate with NPI "1003045220" + zip "94597"
+4. AI asks for PA ID or member ID → Say: "PA-00012345"
+5. AI delivers PA status: Approved, MRI Lumbar Spine, expires July 18 2026
+
+**Key point:** "Prior auth status checks are one of the highest-volume call types — the AI handles it end to end without any human involvement."
+
+**Alternate scenario (denied PA):**
+- Use PA ID: "PA-00012400" → AI reads back denial reason and offers transfer to appeals
+
+### 5. Transfer Demo (2 min)
 
 **On the phone:**
 1. Call the inbound number one more time
-2. Say: "I need to submit a prior authorization"
-3. AI recognizes this is out of scope and offers to transfer
+2. Say: "I need to submit a new prior authorization"
+3. AI recognizes this is outside its scope (submitting vs. checking) and offers to transfer
 4. Call transfers to a human (or rings out in demo)
 
-**Key point:** "For anything outside eligibility and claims — like prior auth — the AI doesn't guess. It immediately offers a warm transfer with full context."
+**Key point:** "The AI knows the difference between *checking* a prior auth and *submitting* one. It handles status checks automatically but transfers for new submissions."
 
-### 5. Dashboard Deep Dive (3 min)
+### 6. Dashboard Deep Dive (3 min)
 
-- Show the call log with all three calls now visible
-- Filter by intent: show only eligibility calls
+- Show the call log with all four calls now visible
+- Filter by intent: show only eligibility calls, then prior auth
 - Filter by outcome: show only transferred calls
 - "Your ops team can use this to identify training opportunities, audit AI accuracy, and track performance in real time"
 - Show the flag feature: "If a supervisor spots something concerning, they can flag it for review"
 - Show tags: "Calls are automatically tagged, and your team can add custom tags"
 
-### 6. ROI Summary (2 min)
+### 7. ROI Summary (2 min)
 
 - "Based on the $600K addressable call center cost and the 65%+ deflection rate we're seeing..."
 - "At $5K/month, that's $380K in projected annual savings — a 63% ROI"

@@ -50,6 +50,7 @@ const CallLog = () => {
             <option value="">All Intents</option>
             <option value="eligibility">Eligibility</option>
             <option value="claims">Claims</option>
+            <option value="prior_auth">Prior Auth</option>
             <option value="other">Other</option>
           </select>
           <select value={outcomeFilter} onChange={(e) => setOutcomeFilter(e.target.value)}
@@ -95,8 +96,9 @@ const CallLog = () => {
                     <span className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${
                       call.intent === 'eligibility' ? 'bg-brand-50 text-brand-600' :
                       call.intent === 'claims' ? 'bg-violet-50 text-violet-600' :
+                      call.intent === 'prior_auth' ? 'bg-orange-50 text-orange-600' :
                       'bg-secondary text-muted-foreground'
-                    }`}>{call.intent || 'unknown'}</span>
+                    }`}>{call.intent === 'prior_auth' ? 'prior auth' : call.intent || 'unknown'}</span>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${

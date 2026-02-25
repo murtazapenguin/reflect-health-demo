@@ -57,6 +57,29 @@ class EligibilityResponse(BaseModel):
     service_notes: Optional[str] = None
 
 
+class PriorAuthRequest(BaseModel):
+    pa_id: Optional[str] = None
+    member_id: Optional[str] = None
+
+
+class PriorAuthResponse(BaseModel):
+    found: bool
+    message: Optional[str] = None
+    pa_id: Optional[str] = None
+    member_id: Optional[str] = None
+    patient_name: Optional[str] = None
+    service_description: Optional[str] = None
+    procedure_code: Optional[str] = None
+    status: Optional[str] = None
+    urgency: Optional[str] = None
+    submitted_date: Optional[str] = None
+    decision_date: Optional[str] = None
+    expiration_date: Optional[str] = None
+    approved_units: Optional[str] = None
+    denial_reason: Optional[str] = None
+    notes: Optional[str] = None
+
+
 class ClaimsRequest(BaseModel):
     npi: Optional[str] = None
     claim_number: Optional[str] = None

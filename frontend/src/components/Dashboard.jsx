@@ -9,7 +9,7 @@ import {
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts'
 import { api } from '../api'
 
-const INTENT_COLORS = { eligibility: '#fc459d', claims: '#7c5cf5', other: '#f59e0b', general: '#94a3b8', prior_auth: '#ef4444', unknown: '#94a3b8' }
+const INTENT_COLORS = { eligibility: '#fc459d', claims: '#7c5cf5', prior_auth: '#f97316', other: '#f59e0b', general: '#94a3b8', unknown: '#94a3b8' }
 const OUTCOME_COLORS = { resolved: '#34d399', transferred: '#f59e0b', failed: '#ef4444', not_found: '#94a3b8', auth_failed: '#ef4444', unknown: '#cbd5e1' }
 
 const Dashboard = () => {
@@ -208,8 +208,9 @@ const Dashboard = () => {
                     <span className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${
                       call.intent === 'eligibility' ? 'bg-brand-50 text-brand-600' :
                       call.intent === 'claims' ? 'bg-violet-50 text-violet-600' :
+                      call.intent === 'prior_auth' ? 'bg-orange-50 text-orange-600' :
                       'bg-secondary text-muted-foreground'
-                    }`}>{call.intent || 'unknown'}</span>
+                    }`}>{call.intent === 'prior_auth' ? 'prior auth' : call.intent || 'unknown'}</span>
                   </td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex px-2 py-0.5 text-[10px] font-semibold rounded-full ${

@@ -21,6 +21,8 @@ const DISPOSITION_MAP = {
   'claims|resolved': { code: 'AI_RESOLVED_CLAIMS', label: 'AI Resolved — Claims', color: 'emerald' },
   'eligibility|transferred': { code: 'AI_TRANSFER_ELIG', label: 'Transfer — Eligibility', color: 'amber' },
   'claims|transferred': { code: 'AI_TRANSFER_CLAIMS', label: 'Transfer — Claims', color: 'amber' },
+  'prior_auth|resolved': { code: 'AI_RESOLVED_PA', label: 'AI Resolved — Prior Auth', color: 'emerald' },
+  'prior_auth|transferred': { code: 'AI_TRANSFER_PA', label: 'Transfer — Prior Auth', color: 'amber' },
   'other|transferred': { code: 'AI_TRANSFER_OTHER', label: 'Transfer — Other / Out of Scope', color: 'amber' },
   'other|resolved': { code: 'AI_RESOLVED_OTHER', label: 'AI Resolved — Other', color: 'emerald' },
   '_|failed': { code: 'AI_FAILED', label: 'AI Failed', color: 'red' },

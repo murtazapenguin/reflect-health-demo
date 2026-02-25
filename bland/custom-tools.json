@@ -172,6 +172,49 @@
         "denial_reason": "$.denial_reason",
         "appeal_deadline": "$.appeal_deadline"
       }
+    },
+    {
+      "name": "LookupPriorAuth",
+      "description": "Looks up a prior authorization request by PA ID or member ID. Call this after the provider asks to check on a prior auth status.",
+      "url": "YOUR_BACKEND_URL/api/v1/voice/prior-auth",
+      "method": "POST",
+      "headers": {
+        "Content-Type": "application/json"
+      },
+      "body": {
+        "pa_id": "{{input.pa_id}}",
+        "member_id": "{{input.member_id}}"
+      },
+      "input_schema": {
+        "example": {
+          "speech": "Let me look up that prior authorization for you.",
+          "pa_id": "PA-00012345",
+          "member_id": ""
+        },
+        "type": "object",
+        "properties": {
+          "speech": "string - what to say while the tool runs",
+          "pa_id": "string - the prior authorization request ID (e.g., PA-00012345)",
+          "member_id": "string - the member ID to look up the most recent PA (e.g., MBR-001234)"
+        }
+      },
+      "response": {
+        "found": "$.found - boolean, whether a prior auth was found",
+        "message": "$.message - string, error message if not found (null on success)",
+        "pa_id": "$.pa_id - string, the prior authorization request ID (e.g., PA-00012345)",
+        "member_id": "$.member_id - string, the patient's member ID",
+        "patient_name": "$.patient_name - string, the patient's full name",
+        "service_description": "$.service_description - string, what the PA is for (e.g., 'MRI Lumbar Spine', 'Physical Therapy')",
+        "procedure_code": "$.procedure_code - string, the CPT procedure code",
+        "pa_status": "$.status - string, the PA status: 'approved', 'denied', 'pending_review', 'in_review', or 'expired'",
+        "urgency": "$.urgency - string, 'routine' or 'urgent'",
+        "submitted_date": "$.submitted_date - string, when the PA was submitted (YYYY-MM-DD)",
+        "decision_date": "$.decision_date - string, when the decision was made (null if pending)",
+        "expiration_date": "$.expiration_date - string, when the approval expires (null if not approved)",
+        "approved_units": "$.approved_units - string, what was approved (e.g., '1 procedure', '6 visits', '5 days'). Null if not approved.",
+        "denial_reason": "$.denial_reason - string, reason for denial if denied. Null if not denied.",
+        "notes": "$.notes - string, additional notes about the PA request"
+      }
     }
   ]
 }

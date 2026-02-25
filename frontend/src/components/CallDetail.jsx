@@ -137,8 +137,9 @@ const CallDetail = () => {
           <span className={`inline-flex w-fit px-2 py-0.5 text-xs font-semibold rounded-full ${
             call.intent === 'eligibility' ? 'bg-brand-50 text-brand-600' :
             call.intent === 'claims' ? 'bg-violet-50 text-violet-600' :
+            call.intent === 'prior_auth' ? 'bg-orange-50 text-orange-600' :
             'bg-secondary text-muted-foreground'
-          }`}>{call.intent || 'unknown'}</span>
+          }`}>{call.intent === 'prior_auth' ? 'prior auth' : call.intent || 'unknown'}</span>
         </div>
         <div className="metric-card flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
@@ -255,9 +256,21 @@ const CallDetail = () => {
               cob_status: 'COB Status',
               out_of_pocket_max: 'OOP Max',
               out_of_pocket_met: 'OOP Met',
+              pa_id: 'PA Request ID',
+              pa_status: 'PA Status',
+              service_description: 'Service',
+              procedure_code: 'CPT Code',
+              urgency: 'Urgency',
+              submitted_date: 'Submitted',
+              decision_date: 'Decision Date',
+              expiration_date: 'Expires',
+              approved_units: 'Approved Units',
+              denial_reason: 'Denial Reason',
+              notes: 'Notes',
             }
             const BOOL_KEYS = new Set(['found', 'valid', 'verified', 'service_covered', 'service_prior_auth'])
             const DOLLAR_KEYS = new Set(['service_copay', 'copay_primary', 'copay_specialist', 'deductible', 'deductible_met', 'out_of_pocket_max', 'out_of_pocket_met'])
+            const PA_STATUS_MAP = { approved: 'Approved', denied: 'Denied', pending_review: 'Pending Review', in_review: 'In Review', expired: 'Expired' }
             const formatValue = (key, val) => {
               const s = String(val)
               if (key === 'found') return s === 'true' ? 'Found' : 'Not Found'
@@ -266,6 +279,8 @@ const CallDetail = () => {
               if (key === 'service_prior_auth') return s === 'true' ? 'Yes' : 'No'
               if (key === 'service_coinsurance' && val != null) return `${val}%`
               if (DOLLAR_KEYS.has(key) && val != null) return `$${val}`
+              if (key === 'pa_status') return PA_STATUS_MAP[s] || s
+              if (key === 'urgency') return s === 'urgent' ? 'Urgent' : 'Routine'
               return s
             }
             return (
@@ -299,6 +314,8 @@ const CallDetail = () => {
                         key === 'service_covered' ? (String(value) === 'true' ? 'text-emerald-600' : String(value) === 'false' ? 'text-red-600' : 'text-amber-600') :
                         (key === 'valid' || key === 'verified') ? (String(value) === 'true' ? 'text-emerald-600' : 'text-red-600') :
                         key === 'service_prior_auth' ? (String(value) === 'true' ? 'text-amber-600' : 'text-emerald-600') :
+                        key === 'pa_status' ? (String(value) === 'approved' ? 'text-emerald-600' : String(value) === 'denied' ? 'text-red-600' : String(value) === 'expired' ? 'text-muted-foreground' : 'text-amber-600') :
+                        key === 'urgency' ? (String(value) === 'urgent' ? 'text-red-600' : 'text-foreground') :
                         'text-foreground'
                       }`} title={String(value)}>
                         {formatValue(key, value)}

@@ -22,12 +22,13 @@ async def init_db(settings: Settings) -> None:
     from app.models.call_record import CallRecord
     from app.models.claim import Claim
     from app.models.member import Member
+    from app.models.prior_auth import PriorAuth
     from app.models.provider import Provider
     from app.models.user import User
 
     await init_beanie(
         database=database,
-        document_models=[User, Provider, Member, Claim, CallRecord],
+        document_models=[User, Provider, Member, Claim, PriorAuth, CallRecord],
     )
 
 

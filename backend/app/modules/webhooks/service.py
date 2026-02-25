@@ -111,6 +111,18 @@ def _build_tags(intent: str, outcome: str, variables: dict) -> list:
             elif str(service_covered).lower() in ("false", "0"):
                 tags.append("service-not-covered")
 
+    pa_status = variables.get("pa_status")
+    if pa_status:
+        ps = str(pa_status).lower()
+        if ps == "approved":
+            tags.append("pa-approved")
+        elif ps == "denied":
+            tags.append("pa-denied")
+        elif ps in ("pending_review", "in_review"):
+            tags.append("pa-pending")
+        elif ps == "expired":
+            tags.append("pa-expired")
+
     return tags
 
 

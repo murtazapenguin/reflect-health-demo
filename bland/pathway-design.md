@@ -34,13 +34,14 @@ Rules:
 
 ### START NODE: Greeting
 - **Type**: Default Node
-- **Prompt**: "Thank you for calling Reflect Health provider services. I'm an AI assistant and can help with patient eligibility verification or claim status inquiries. Which one brings you in today?"
+- **Prompt**: "Thank you for calling Reflect Health provider services. I'm an AI assistant and can help with patient eligibility verification, claim status, or prior authorization requests. How can I help you today?"
 - **Extract Variables**:
-  - `call_intent` (string): Description: "The caller's intent. Extract 'eligibility' if they mention eligibility, coverage, benefits, or if a patient has insurance. Extract 'claims' if they mention claim, payment, denial, or check status. Extract 'other' for anything else."
+  - `call_intent` (string): Description: "The caller's intent. Extract 'eligibility' if they mention eligibility, coverage, benefits, or if a patient has insurance. Extract 'claims' if they mention claim, payment, denial, or check status. Extract 'prior_auth' if they mention prior authorization, prior auth, PA request, or authorization status. Extract 'other' for anything else."
 - **Pathways**:
   - "Caller wants eligibility/coverage check" → NPI Authentication
   - "Caller wants claim/payment status" → NPI Authentication
-  - "Caller wants something else (prior auth, billing dispute, etc.)" → Transfer to Human
+  - "Caller wants to check on a prior authorization" → NPI Authentication
+  - "Caller wants something else (billing dispute, general question, etc.)" → Transfer to Human
   - "Intent is unclear after two attempts" → Transfer to Human
 
 ---
@@ -79,6 +80,7 @@ Rules:
 - **Pathways**:
   - "Zip code verified AND call_intent is eligibility" → Eligibility: Collect Patient Info
   - "Zip code verified AND call_intent is claims" → Claims: Collect Patient Info
+  - "Zip code verified AND call_intent is prior_auth" → PA: Collect Info
   - "Zip code mismatch" → Zip Retry
 
 ---
@@ -301,6 +303,91 @@ Rules:
 - **Pathways**:
   - "Caller provides new info" → Claims: Get Claim Number
   - "Caller wants transfer" → Transfer to Human
+
+---
+
+### NODE: PA: Collect Info
+- **Type**: Wait for Response
+- **Prompt**: "I can look up a prior authorization for you. Do you have the PA request ID? It usually starts with PA followed by a dash and some digits. If not, I can search by the patient's member ID."
+- **Extract Variables**:
+  - `pa_id` (string): Description: "The prior authorization request ID, typically in format PA-XXXXXXXX. Could also be spoken as just digits."
+  - `member_id` (string): Description: "The member ID, typically in format MBR-XXXXXX, only if no PA ID is provided"
+- **Condition**: "You must get either a PA request ID OR a member ID before proceeding."
+- **Post-extraction speech**: "One moment while I look that up."
+- **Pathways**:
+  - "Got PA ID or member ID" → PA: Lookup
+
+---
+
+### NODE: PA: Lookup
+- **Type**: Default Node
+- **Prompt**: "Let me look that up for you."
+- **Webhook**: Call `LookupPriorAuth` tool with pa_id and member_id
+- **Pathways**:
+  - "PA found and pa_status is 'approved'" → PA: Approved
+  - "PA found and pa_status is 'denied'" → PA: Denied
+  - "PA found and pa_status is 'pending_review' or 'in_review'" → PA: Pending
+  - "PA found and pa_status is 'expired'" → PA: Expired
+  - "PA not found" → PA: Not Found
+
+---
+
+### NODE: PA: Approved
+- **Type**: Default Node
+- **Prompt**: "Prior authorization {{pa_id}} for {{service_description}} has been APPROVED. It was approved on {{decision_date}}. Approved for: {{approved_units}}. This authorization expires on {{expiration_date}}. {{notes}}. Is there anything else I can help you with?"
+- **Rules**:
+  - Pronounce dates naturally.
+  - Only read fields that have values.
+- **Pathways**:
+  - "Caller wants to check another PA" → PA: Collect Info
+  - "Caller wants eligibility" → Eligibility: Collect Patient Info
+  - "Caller wants claims" → Claims: Collect Patient Info
+  - "Caller is done" → End Call
+
+---
+
+### NODE: PA: Denied
+- **Type**: Default Node
+- **Prompt**: "Prior authorization {{pa_id}} for {{service_description}} was DENIED on {{decision_date}}. Reason: {{denial_reason}}. {{notes}}. Would you like me to transfer you to the appeals team, or is there anything else I can help with?"
+- **Pathways**:
+  - "Caller wants transfer to appeals" → Transfer to Human
+  - "Caller wants to check another PA" → PA: Collect Info
+  - "Caller is done" → End Call
+
+---
+
+### NODE: PA: Pending
+- **Type**: Default Node
+- **Prompt**: "Prior authorization {{pa_id}} for {{service_description}} is currently UNDER REVIEW. It was submitted on {{submitted_date}} as a {{urgency}} request. {{notes}}. Standard review typically takes 5 to 7 business days. Would you like me to transfer you for an update, or is there anything else I can help with?"
+- **Rules**:
+  - For urgency, say "routine" or "urgent" naturally.
+- **Pathways**:
+  - "Caller wants transfer for update" → Transfer to Human
+  - "Caller wants to check another PA" → PA: Collect Info
+  - "Caller is done" → End Call
+
+---
+
+### NODE: PA: Expired
+- **Type**: Default Node
+- **Prompt**: "Prior authorization {{pa_id}} for {{service_description}} was approved but has since EXPIRED. It expired on {{expiration_date}}. {{notes}}. A new authorization would need to be submitted. Would you like me to transfer you to someone who can help with a new request?"
+- **Pathways**:
+  - "Caller wants transfer" → Transfer to Human
+  - "Caller wants to check another PA" → PA: Collect Info
+  - "Caller is done" → End Call
+
+---
+
+### NODE: PA: Not Found
+- **Type**: Wait for Response
+- **Prompt**: "I wasn't able to find a prior authorization matching that information. Could you double-check the PA request ID or member ID and try again? Or I can transfer you to a team member."
+- **Extract Variables**:
+  - `pa_id` (string): Description: "A corrected PA request ID"
+  - `member_id` (string): Description: "A corrected member ID"
+- **Webhook**: Call `LookupPriorAuth` tool if new info provided
+- **Pathways**:
+  - "PA found after retry" → Route based on pa_status (Approved, Denied, Pending, or Expired)
+  - "Still not found or caller wants transfer" → Transfer to Human
 
 ---
 
