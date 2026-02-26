@@ -119,4 +119,5 @@ export const api = {
     }),
 
   getElevenLabsSignedUrl: () => request<{ signed_url: string }>("/elevenlabs/token"),
+  getElevenLabsConfig: () => request<{ agent_id: string }>("/elevenlabs/config"),
 };

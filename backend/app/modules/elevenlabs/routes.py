@@ -7,6 +7,18 @@ from app.config import get_settings
 router = APIRouter()
 
 
+@router.get("/config", summary="Get ElevenLabs agent ID")
+async def get_config():
+    """Return the agent ID for the ElevenLabs widget embed."""
+    settings = get_settings()
+    if not settings.elevenlabs_api_key or not settings.elevenlabs_agent_id:
+        raise HTTPException(
+            status_code=503,
+            detail="ElevenLabs is not configured. Set ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID.",
+        )
+    return {"agent_id": settings.elevenlabs_agent_id}
+
+
 @router.get("/token", summary="Get ElevenLabs conversation token")
 async def get_conversation_token():
     """Generate a signed URL for ElevenLabs Conversational AI WebSocket connection.
