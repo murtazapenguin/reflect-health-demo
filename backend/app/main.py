@@ -36,6 +36,7 @@ def create_app() -> FastAPI:
 
     register_error_handlers(app)
 
+    from app.modules.admin.routes import router as admin_router
     from app.modules.auth.routes import router as auth_router
     from app.modules.dashboard.routes import router as dashboard_router
     from app.modules.elevenlabs.routes import router as elevenlabs_router
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(auth_router, prefix=f"{settings.api_v1_prefix}/auth", tags=["auth"])
+    app.include_router(admin_router, prefix=f"{settings.api_v1_prefix}/admin", tags=["admin"])
     app.include_router(voice_router, prefix=f"{settings.api_v1_prefix}/voice", tags=["voice"])
     app.include_router(webhooks_router, prefix=f"{settings.api_v1_prefix}/webhooks", tags=["webhooks"])
     app.include_router(dashboard_router, prefix=f"{settings.api_v1_prefix}/dashboard", tags=["dashboard"])
