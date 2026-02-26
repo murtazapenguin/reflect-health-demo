@@ -124,7 +124,6 @@ export const api = {
     conversation_id: string | null;
     transcript: { speaker: string; text: string }[];
     duration_seconds: number;
-    tool_calls: Record<string, unknown>[];
   }) =>
     request<{ call_id: string; status: string }>("/elevenlabs/save-conversation", {
       method: "POST",

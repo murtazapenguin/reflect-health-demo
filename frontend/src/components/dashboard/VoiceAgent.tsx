@@ -28,8 +28,8 @@ export function VoiceAgent() {
   const [micMuted, setMicMuted] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [savedCallId, setSavedCallId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
-  const toolCallsRef = useRef<Record<string, unknown>[]>([]);
   const startTimeRef = useRef<Date | null>(null);
   const messagesRef = useRef<Message[]>([]);
   const conversationIdRef = useRef<string | null>(null);
@@ -41,6 +41,7 @@ export function VoiceAgent() {
     const finalMessages = messagesRef.current.filter((m) => m.isFinal);
     if (finalMessages.length === 0) return;
 
+    setIsSaving(true);
     const duration = startTimeRef.current
       ? Math.round((Date.now() - startTimeRef.current.getTime()) / 1000)
       : 0;
@@ -53,11 +54,12 @@ export function VoiceAgent() {
           text: m.text,
         })),
         duration_seconds: duration,
-        tool_calls: toolCallsRef.current,
       });
       setSavedCallId(result.call_id);
     } catch {
       // Non-critical — don't block the UI
+    } finally {
+      setIsSaving(false);
     }
   }, []);
 
@@ -66,7 +68,6 @@ export function VoiceAgent() {
       setIsConnecting(false);
       setError(null);
       startTimeRef.current = new Date();
-      toolCallsRef.current = [];
       setSavedCallId(null);
     },
     onDisconnect: () => {
@@ -90,9 +91,6 @@ export function VoiceAgent() {
           }
           return [...prev, { role, text: message.message, timestamp: new Date(), isFinal: true }];
         });
-      }
-      if (message.type === "tool_call" || message.tool_name || message.tool_call) {
-        toolCallsRef.current.push(message);
       }
     },
     onError: (err) => {
@@ -363,14 +361,21 @@ export function VoiceAgent() {
                     </dd>
                   </div>
                 )}
-                {savedCallId && (
+                {(isSaving || savedCallId) && (
                   <div className="flex justify-between items-center">
                     <dt className="type-micro text-muted-foreground">Call Log</dt>
                     <dd>
-                      <Badge className="bg-emerald-100 text-emerald-700 text-[9px]">
-                        <CheckCircle className="h-2.5 w-2.5 mr-1" />
-                        Saved
-                      </Badge>
+                      {isSaving ? (
+                        <Badge className="bg-amber-100 text-amber-700 text-[9px]">
+                          <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
+                          Saving...
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-emerald-100 text-emerald-700 text-[9px]">
+                          <CheckCircle className="h-2.5 w-2.5 mr-1" />
+                          Saved
+                        </Badge>
+                      )}
                     </dd>
                   </div>
                 )}
