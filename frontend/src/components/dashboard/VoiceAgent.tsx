@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useConversation } from "@elevenlabs/react";
 import {
@@ -31,16 +31,87 @@ export function VoiceAgent() {
   const [isSaving, setIsSaving] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<Date | null>(null);
-  const messagesRef = useRef<Message[]>([]);
-  const conversationIdRef = useRef<string | null>(null);
+  const navigate = useNavigate();
 
-  useEffect(() => { messagesRef.current = messages; }, [messages]);
-  useEffect(() => { conversationIdRef.current = conversationId; }, [conversationId]);
+  const conversation = useConversation({
+    onConnect: () => {
+      setIsConnecting(false);
+      setError(null);
+      startTimeRef.current = new Date();
+      setSavedCallId(null);
+    },
+    onDisconnect: () => {
+      // Save is triggered explicitly after endSession, not here,
+      // to avoid blocking the disconnect callback.
+    },
+    onMessage: (message) => {
+      if (message.type === "transcript" && message.role) {
+        const role = message.role === "user" ? "user" : "agent";
+        setMessages((prev) => {
+          if (!message.isFinal) {
+            const last = prev[prev.length - 1];
+            if (last && last.role === role && !last.isFinal) {
+              return [...prev.slice(0, -1), { ...last, text: message.message }];
+            }
+            return [...prev, { role, text: message.message, timestamp: new Date(), isFinal: false }];
+          }
+          const last = prev[prev.length - 1];
+          if (last && last.role === role && !last.isFinal) {
+            return [...prev.slice(0, -1), { role, text: message.message, timestamp: new Date(), isFinal: true }];
+          }
+          return [...prev, { role, text: message.message, timestamp: new Date(), isFinal: true }];
+        });
+      }
+    },
+    onError: (err) => {
+      setError(typeof err === "string" ? err : "Connection error");
+      setIsConnecting(false);
+    },
+  });
 
-  const saveConversationRef = useRef<() => Promise<void>>();
-  saveConversationRef.current = async () => {
-    const finalMessages = messagesRef.current.filter((m) => m.isFinal);
-    const convId = conversationIdRef.current;
+  useEffect(() => {
+    if (transcriptRef.current) {
+      transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  const startConversation = useCallback(async () => {
+    setIsConnecting(true);
+    setError(null);
+    setMessages([]);
+
+    try {
+      await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setError("Microphone access is required. Please allow microphone access and try again.");
+      setIsConnecting(false);
+      return;
+    }
+
+    try {
+      const { signed_url } = await api.getElevenLabsSignedUrl();
+      const id = await conversation.startSession({
+        signedUrl: signed_url,
+      });
+      setConversationId(id);
+    } catch (err: any) {
+      const msg = err?.message || "Failed to start conversation";
+      if (msg.includes("503") || msg.includes("not configured")) {
+        setError("ElevenLabs is not configured yet. Set ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID on the backend.");
+      } else {
+        setError(msg);
+      }
+      setIsConnecting(false);
+    }
+  }, [conversation]);
+
+  const endConversation = useCallback(async () => {
+    const finalMessages = messages.filter((m) => m.isFinal);
+    const convId = conversationId;
+
+    await conversation.endSession();
+    setConversationId(null);
+
     if (finalMessages.length === 0) return;
 
     setIsSaving(true);
@@ -59,129 +130,12 @@ export function VoiceAgent() {
       });
       setSavedCallId(result.call_id);
     } catch (err: any) {
-      setError(`Failed to save conversation: ${err?.message || "unknown error"}`);
+      console.error("Failed to save conversation:", err);
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [conversation, messages, conversationId]);
 
-  const onConnect = useCallback(() => {
-    // #region agent log
-    console.log("[DBG] onConnect fired — WebSocket connected");
-    // #endregion
-    setIsConnecting(false);
-    setError(null);
-    startTimeRef.current = new Date();
-    setSavedCallId(null);
-  }, []);
-
-  const onDisconnect = useCallback(() => {
-    // #region agent log
-    console.log("[DBG] onDisconnect fired — msgs:", messagesRef.current.length, "convId:", conversationIdRef.current);
-    // #endregion
-    saveConversationRef.current?.();
-  }, []);
-
-  const onMessage = useCallback((message: any) => {
-    if (message.type === "transcript" && message.role) {
-      const role = message.role === "user" ? "user" : "agent";
-      setMessages((prev) => {
-        if (!message.isFinal) {
-          const last = prev[prev.length - 1];
-          if (last && last.role === role && !last.isFinal) {
-            return [...prev.slice(0, -1), { ...last, text: message.message }];
-          }
-          return [...prev, { role, text: message.message, timestamp: new Date(), isFinal: false }];
-        }
-        const last = prev[prev.length - 1];
-        if (last && last.role === role && !last.isFinal) {
-          return [...prev.slice(0, -1), { role, text: message.message, timestamp: new Date(), isFinal: true }];
-        }
-        return [...prev, { role, text: message.message, timestamp: new Date(), isFinal: true }];
-      });
-    }
-  }, []);
-
-  const onError = useCallback((err: any) => {
-    // #region agent log
-    console.error("[DBG] onError fired:", typeof err === "string" ? err : err?.message || String(err));
-    // #endregion
-    setError(typeof err === "string" ? err : "Connection error");
-    setIsConnecting(false);
-  }, []);
-
-  const onStatusChange = useCallback(({ status }: { status: string }) => {
-    // #region agent log
-    console.log("[DBG] onStatusChange:", status);
-    // #endregion
-  }, []);
-
-  const onDebug = useCallback((evt: any) => {
-    // #region agent log
-    console.log("[DBG] onDebug:", evt?.type || "unknown", evt);
-    // #endregion
-  }, []);
-
-  const hookOptions = useMemo(() => ({
-    onConnect,
-    onDisconnect,
-    onMessage,
-    onError,
-    onStatusChange,
-    onDebug,
-  }), [onConnect, onDisconnect, onMessage, onError, onStatusChange, onDebug]);
-
-  const conversation = useConversation(hookOptions);
-
-  useEffect(() => {
-    if (transcriptRef.current) {
-      transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
-    }
-  }, [messages]);
-
-  const startConversation = useCallback(async () => {
-    setIsConnecting(true);
-    setError(null);
-    setMessages([]);
-
-    try {
-      // #region agent log
-      console.log("[DBG] Fetching agent config from backend...");
-      // #endregion
-      const { agent_id } = await api.getElevenLabsConfig();
-      // #region agent log
-      console.log("[DBG] Got agent_id:", agent_id, "| Starting session with agentId directly...");
-      // #endregion
-      const id = await conversation.startSession({
-        agentId: agent_id,
-      });
-      // #region agent log
-      console.log("[DBG] Session started OK. conversationId:", id);
-      // #endregion
-      setConversationId(id);
-    } catch (err: any) {
-      const msg = err?.message || "Failed to start conversation";
-      // #region agent log
-      console.error("[DBG] Session start FAILED:", msg);
-      // #endregion
-      if (msg.includes("503") || msg.includes("not configured")) {
-        setError("ElevenLabs is not configured yet. Set ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID on the backend.");
-      } else {
-        setError(msg);
-      }
-      setIsConnecting(false);
-    }
-  }, [conversation]);
-
-  const endConversation = useCallback(async () => {
-    try {
-      await conversation.endSession();
-    } catch {
-      // session may already be closed
-    }
-  }, [conversation]);
-
-  const navigate = useNavigate();
   const isActive = conversation.status === "connected";
 
   return (
