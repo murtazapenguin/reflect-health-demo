@@ -34,33 +34,22 @@ export function VoiceAgent() {
   const navigate = useNavigate();
 
   const conversation = useConversation({
-    onConnect: () => {
+    onConnect: ({ conversationId: connId }) => {
       setIsConnecting(false);
       setError(null);
+      setConversationId(connId);
       startTimeRef.current = new Date();
       setSavedCallId(null);
     },
     onDisconnect: () => {
       // Save triggered explicitly by endConversation, not here
     },
-    onMessage: (message) => {
-      if (message.type === "transcript" && message.role) {
-        const role = message.role === "user" ? "user" : "agent";
-        setMessages((prev) => {
-          if (!message.isFinal) {
-            const last = prev[prev.length - 1];
-            if (last && last.role === role && !last.isFinal) {
-              return [...prev.slice(0, -1), { ...last, text: message.message }];
-            }
-            return [...prev, { role, text: message.message, timestamp: new Date(), isFinal: false }];
-          }
-          const last = prev[prev.length - 1];
-          if (last && last.role === role && !last.isFinal) {
-            return [...prev.slice(0, -1), { role, text: message.message, timestamp: new Date(), isFinal: true }];
-          }
-          return [...prev, { role, text: message.message, timestamp: new Date(), isFinal: true }];
-        });
-      }
+    onMessage: (msg) => {
+      const role: "user" | "agent" = msg.role === "user" ? "user" : "agent";
+      setMessages((prev) => [
+        ...prev,
+        { role, text: msg.message, timestamp: new Date(), isFinal: true },
+      ]);
     },
     onError: (err) => {
       const msg = typeof err === "string" ? err : (err as any)?.message || "Connection error";
@@ -106,13 +95,12 @@ export function VoiceAgent() {
   }, [conversation]);
 
   const endConversation = useCallback(async () => {
-    const finalMessages = messages.filter((m) => m.isFinal);
+    const currentMessages = [...messages];
     const convId = conversationId;
 
     await conversation.endSession();
-    setConversationId(null);
 
-    if (finalMessages.length === 0) return;
+    if (currentMessages.length === 0) return;
 
     setIsSaving(true);
     const duration = startTimeRef.current
@@ -122,7 +110,7 @@ export function VoiceAgent() {
     try {
       const result = await api.saveElevenLabsConversation({
         conversation_id: convId,
-        transcript: finalMessages.map((m) => ({
+        transcript: currentMessages.map((m) => ({
           speaker: m.role === "agent" ? "agent" : "user",
           text: m.text,
         })),
@@ -215,7 +203,7 @@ export function VoiceAgent() {
                           msg.role === "agent"
                             ? "bg-primary/5 border border-primary/15"
                             : "bg-secondary border border-border"
-                        } ${!msg.isFinal ? "opacity-60" : ""}`}
+                        }`}
                       >
                         <div className="flex items-center gap-1.5 mb-1">
                           {msg.role === "agent" ? (
@@ -232,11 +220,6 @@ export function VoiceAgent() {
                           >
                             {msg.role === "agent" ? "AI Agent" : "You"}
                           </span>
-                          {!msg.isFinal && (
-                            <span className="text-[9px] text-muted-foreground italic ml-1">
-                              listening...
-                            </span>
-                          )}
                         </div>
                         <p className="text-sm text-foreground leading-relaxed">{msg.text}</p>
                       </div>
@@ -341,7 +324,7 @@ export function VoiceAgent() {
                 <div className="flex justify-between">
                   <dt className="type-micro text-muted-foreground">Messages</dt>
                   <dd className="text-xs font-mono font-medium text-foreground">
-                    {messages.filter((m) => m.isFinal).length}
+                    {messages.length}
                   </dd>
                 </div>
                 {conversationId && (
