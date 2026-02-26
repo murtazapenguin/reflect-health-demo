@@ -154,7 +154,6 @@ export function VoiceAgent() {
       // #endregion
       const id = await conversation.startSession({
         signedUrl: signed_url,
-        connectionType: "websocket",
       });
       // #region agent log
       console.log("[DBG] Session started OK. conversationId:", id);
