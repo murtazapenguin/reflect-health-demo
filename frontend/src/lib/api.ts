@@ -118,7 +118,7 @@ export const api = {
       body: JSON.stringify({ flagged }),
     }),
 
-  getElevenLabsSignedUrl: () => request<{ signed_url: string }>("/elevenlabs/token"),
+  getElevenLabsToken: () => request<{ token: string }>("/elevenlabs/token"),
 
   saveElevenLabsConversation: (data: {
     conversation_id: string | null;

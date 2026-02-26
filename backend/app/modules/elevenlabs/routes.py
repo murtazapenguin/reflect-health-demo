@@ -206,7 +206,7 @@ def _determine_outcome(extracted: Dict[str, Any], transcript_text: str) -> str:
 
 @router.get("/token", summary="Get ElevenLabs conversation token")
 async def get_conversation_token():
-    """Generate a signed URL for ElevenLabs Conversational AI WebSocket connection."""
+    """Generate a conversation token for ElevenLabs Conversational AI (WebRTC)."""
     settings = get_settings()
     if not settings.elevenlabs_api_key or not settings.elevenlabs_agent_id:
         raise HTTPException(
@@ -215,7 +215,7 @@ async def get_conversation_token():
         )
 
     url = (
-        f"https://api.elevenlabs.io/v1/convai/conversation/get-signed-url"
+        f"https://api.elevenlabs.io/v1/convai/conversation/token"
         f"?agent_id={settings.elevenlabs_agent_id}"
     )
     try:
@@ -226,8 +226,8 @@ async def get_conversation_token():
             )
             resp.raise_for_status()
             data = resp.json()
-            logger.info("ElevenLabs signed URL generated for agent {}", settings.elevenlabs_agent_id)
-            return {"signed_url": data["signed_url"]}
+            logger.info("ElevenLabs conversation token generated for agent {}", settings.elevenlabs_agent_id)
+            return {"token": data["token"]}
     except httpx.HTTPStatusError as e:
         logger.error("ElevenLabs API error: {} {}", e.response.status_code, e.response.text)
         raise HTTPException(status_code=502, detail="Failed to get ElevenLabs token")

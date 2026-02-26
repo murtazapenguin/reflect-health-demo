@@ -134,8 +134,11 @@ export function VoiceAgent() {
     }
 
     try {
-      const { signed_url } = await api.getElevenLabsSignedUrl();
-      const id = await conversation.startSession({ signedUrl: signed_url });
+      const { token } = await api.getElevenLabsToken();
+      const id = await conversation.startSession({
+        conversationToken: token,
+        connectionType: "webrtc",
+      });
       setConversationId(id);
     } catch (err: any) {
       const msg = err?.message || "Failed to start conversation";
