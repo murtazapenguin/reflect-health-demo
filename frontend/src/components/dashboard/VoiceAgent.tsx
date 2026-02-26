@@ -54,24 +54,27 @@ export function VoiceAgent() {
     },
     onMessage: (msg) => {
       const role: "user" | "agent" = msg.role === "user" ? "user" : "agent";
-      setMessages((prev) => [
-        ...prev,
-        { role, text: msg.message, timestamp: new Date(), isFinal: true },
-      ]);
+      setMessages((prev) => {
+        const updated = [...prev, { role, text: msg.message, timestamp: new Date(), isFinal: true }];
 
-      if (role === "agent") {
-        const lower = msg.message.toLowerCase();
-        const isTransfer = lower.includes("connect you with") || lower.includes("transfer you") || lower.includes("team member");
-        const isGoodbye = lower.includes("have a great day") || lower.includes("thank you for calling") || lower.includes("goodbye");
-        if (isTransfer || isGoodbye) {
-          if (autoEndTimerRef.current) clearTimeout(autoEndTimerRef.current);
-          autoEndTimerRef.current = setTimeout(() => {
-            if (!isEndingRef.current) {
-              endConversation();
-            }
-          }, 3000);
+        // Only auto-end after the user has spoken at least once (skip agent greeting)
+        const userHasSpoken = updated.some((m) => m.role === "user");
+        if (role === "agent" && userHasSpoken) {
+          const lower = msg.message.toLowerCase();
+          const isTransfer = lower.includes("connect you with") || lower.includes("transfer you to") || lower.includes("team member who can");
+          const isGoodbye = lower.includes("have a great day") || lower.includes("goodbye");
+          if (isTransfer || isGoodbye) {
+            if (autoEndTimerRef.current) clearTimeout(autoEndTimerRef.current);
+            autoEndTimerRef.current = setTimeout(() => {
+              if (!isEndingRef.current) {
+                endConversation();
+              }
+            }, 4000);
+          }
         }
-      }
+
+        return updated;
+      });
     },
     onError: (err) => {
       const msg = typeof err === "string" ? err : (err as any)?.message || "Connection error";
