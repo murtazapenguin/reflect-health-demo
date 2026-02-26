@@ -133,9 +133,10 @@ export function AudioEngineProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const playTTS = useCallback(async (text: string, voiceId: string, volume = 0.4): Promise<void> => {
-    // If muted, simulate a short delay instead of playing audio
     if (isMuted) {
-      await new Promise((r) => setTimeout(r, 800));
+      const words = text.split(/\s+/).length;
+      const estimatedMs = Math.max(1800, (words / 2.8) * 1000);
+      await new Promise((r) => setTimeout(r, estimatedMs));
       return;
     }
 
