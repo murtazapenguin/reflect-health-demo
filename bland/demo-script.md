@@ -288,17 +288,43 @@ All four CMS-verified providers below are pre-loaded for instant authentication.
 4. Show transcript updating in real time
 5. End the call — show it appears in the Call Log alongside the phone calls
 
-### 6. Transfer Demo (2 min)
+### 6. Escalation / Transfer Demo (3 min)
 
-Call the inbound number and say: "I need to submit a new prior authorization"
-→ AI recognizes it's out of scope and offers transfer
+**Say:** "Now let me show you what happens when the AI reaches its limits — or when a caller gets frustrated."
+
+**Scenario A — Out-of-scope request:**
+1. Call the inbound number (or use Live Agent in-browser)
+2. Say: "I need to submit a brand new prior authorization"
+3. AI recognizes it cannot create new PAs and offers transfer to human
+4. End the call
+
+**Scenario B — Caller frustration:**
+1. Start a new call
+2. Authenticate with NPI "1003045220" + zip "94597"
+3. When asked for patient info, give a name NOT in the system: "Jane Doe, May 5th, 1990"
+4. When the AI says it can't find the patient, express frustration: "I already told you the name. This is ridiculous."
+5. AI detects frustration → immediately offers human transfer
+
+**Scenario C — Auth failure:**
+1. Start a new call
+2. Give an invalid NPI: "9999999999"
+3. When the AI says it's invalid, push back: "That's my NPI, I don't know why it's not working"
+4. AI offers to transfer to a human agent
+
+**After the calls, switch to the dashboard:**
+- Click the **Escalations** tab — all transferred calls appear in a queue
+- Show the reason categories: Frustration, Auth Failed, Out of Scope
+- Click into any escalated call to see full transcript, transfer reason, and extracted data
+- "Your supervisors see every escalation in real time with full context for the handoff"
 
 ### 7. Dashboard Deep Dive (3 min)
 
-- Show the call log with all calls visible
-- Filter by intent and outcome
+- Show the **Call Log** — all calls with source indicator (Phone vs In-Browser)
+- Filter by intent, outcome, or search by provider
+- Click into a call to see transcript, extracted data, and tags
+- Show the **Escalations** tab — escalated calls with transfer reasons
 - Show flag feature and tag management
-- "Your ops team can audit AI accuracy and track performance in real time"
+- "Your ops team can audit AI accuracy, review escalations, and track performance in real time"
 
 ---
 
@@ -309,12 +335,14 @@ If Bland AI has issues during the live demo:
 2. Walk through transcripts to demonstrate conversation flow
 3. Use the **Live Agent** (ElevenLabs) tab as an alternative live demo
 4. Play any available call recordings from the dashboard
+5. Show the **Escalations** tab with pre-seeded escalation data
 
 ## Key Differentiators
 
 1. **Natural conversation, not IVR**: No "press 1 for eligibility" — providers just talk naturally
 2. **Real data integration**: Pulls from your actual data structure — not a scripted demo
 3. **Instant visibility**: Every call logged in real time — no waiting for reports
-4. **Smart escalation**: AI knows its limits and transfers gracefully
-5. **Multi-channel**: Same AI available over phone (Bland) and in-browser (ElevenLabs)
-6. **Speed**: Average call under 90 seconds vs. 4-5 minutes with a human agent
+4. **Smart escalation**: AI knows its limits, detects frustration, and transfers gracefully
+5. **Escalation audit trail**: Full transcript + context handed off to human agents
+6. **Multi-channel**: Same AI available over phone (Bland) and in-browser (ElevenLabs)
+7. **Speed**: Average call under 90 seconds vs. 4-5 minutes with a human agent

@@ -15,6 +15,8 @@ class CallSummary(BaseModel):
     tags: List[str] = []
     flagged: bool = False
     transferred: bool = False
+    transfer_reason: Optional[str] = None
+    source: str = "bland"
 
 
 class CallDetail(BaseModel):
@@ -36,6 +38,8 @@ class CallDetail(BaseModel):
     tags: List[str] = []
     flagged: bool = False
     transferred: bool = False
+    transfer_reason: Optional[str] = None
+    source: str = "bland"
     auth_success: Optional[bool] = None
     extracted_data: Dict[str, Any] = {}
 

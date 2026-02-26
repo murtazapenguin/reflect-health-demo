@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCalls } from "@/hooks/use-api";
 import { format } from "date-fns";
-import { Search, Filter, ChevronLeft, ChevronRight, Phone, LogOut } from "lucide-react";
+import { Search, Filter, ChevronLeft, ChevronRight, Phone, LogOut, Mic, PhoneForwarded } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -184,7 +184,7 @@ export default function CallLogPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead className="text-[11px]">Time</TableHead>
-                      <TableHead className="text-[11px]">Call ID</TableHead>
+                      <TableHead className="text-[11px]">Source</TableHead>
                       <TableHead className="text-[11px]">Provider</TableHead>
                       <TableHead className="text-[11px]">Patient</TableHead>
                       <TableHead className="text-[11px]">Intent</TableHead>
@@ -205,8 +205,16 @@ export default function CallLogPage() {
                             ? format(new Date(call.started_at), "MMM d, h:mm a")
                             : "—"}
                         </TableCell>
-                        <TableCell className="text-[11px] font-mono">
-                          {call.call_id?.slice(0, 12)}...
+                        <TableCell>
+                          {(call.source === "elevenlabs" || call.call_id?.startsWith("el_")) ? (
+                            <Badge variant="outline" className="text-[8px] bg-purple-50 text-purple-700 border-purple-200 gap-0.5">
+                              <Mic className="h-2 w-2" /> Browser
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[8px] bg-gray-50 text-gray-600 gap-0.5">
+                              <Phone className="h-2 w-2" /> Phone
+                            </Badge>
+                          )}
                         </TableCell>
                         <TableCell className="text-[11px]">
                           {call.provider_name || "—"}
@@ -223,12 +231,17 @@ export default function CallLogPage() {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Badge
-                            variant="secondary"
-                            className={`text-[9px] ${OUTCOME_STYLES[call.outcome] || OUTCOME_STYLES.unknown}`}
-                          >
-                            {call.outcome || "—"}
-                          </Badge>
+                          <div className="flex items-center gap-1">
+                            <Badge
+                              variant="secondary"
+                              className={`text-[9px] ${OUTCOME_STYLES[call.outcome] || OUTCOME_STYLES.unknown}`}
+                            >
+                              {call.outcome || "—"}
+                            </Badge>
+                            {call.transferred && (
+                              <PhoneForwarded className="h-3 w-3 text-amber-600" title={call.transfer_reason || "Transferred to human"} />
+                            )}
+                          </div>
                         </TableCell>
                         <TableCell className="text-[11px] font-mono">
                           {call.duration_seconds
@@ -254,6 +267,7 @@ export default function CallLogPage() {
                     {data?.items.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-sm">
+
                           No calls found
                         </TableCell>
                       </TableRow>

@@ -11,7 +11,7 @@ import {
 import { api, type KPIs, type KPITrendPoint } from "@/lib/api";
 
 export type ViewMode = "internal" | "tpa-demo";
-export type DashboardTab = "contact" | "claims" | "network" | "roi" | "intelligence" | "agent";
+export type DashboardTab = "contact" | "claims" | "network" | "roi" | "intelligence" | "agent" | "escalations";
 export type DeploymentMode = "white-label" | "embedded" | "opyn";
 
 interface DashboardState {

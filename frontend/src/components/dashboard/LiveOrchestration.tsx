@@ -3,7 +3,7 @@ import { useSimulation, type SimEvent, type ClaimsEvent, type NetworkEvent, type
 import { useDashboard, type DashboardTab } from "@/contexts/DashboardContext";
 import { CountUpValue } from "./CountUpValue";
 import { fmtCurrency, fmtDecimal } from "@/lib/format";
-import { Phone, FileText, Globe, TrendingUp, Zap, Users, DollarSign, ArrowRight, ShieldCheck, AlertTriangle, CheckCircle, Mic } from "lucide-react";
+import { Phone, FileText, Globe, TrendingUp, Zap, Users, DollarSign, ArrowRight, ShieldCheck, AlertTriangle, CheckCircle, Mic, UserCheck } from "lucide-react";
 import { InteractionDetailModal } from "./InteractionDetailModal";
 
 /* ─── Tab Config ─── */
@@ -49,6 +49,12 @@ const TAB_CONFIG: Record<DashboardTab, {
     subtitle: "In-Browser Conversational AI",
     icon: <Mic className="h-3.5 w-3.5" />,
     pipelineStages: ["Mic Input", "Speech-to-Text", "Intent Detection", "Backend Lookup", "Response Generation", "Text-to-Speech"],
+  },
+  escalations: {
+    title: "Escalation Queue",
+    subtitle: "Calls Transferred to Human Agents",
+    icon: <UserCheck className="h-3.5 w-3.5" />,
+    pipelineStages: ["AI Interaction", "Frustration Detection", "Escalation Trigger", "Context Handoff", "Human Agent", "Resolution"],
   },
 };
 
@@ -290,6 +296,7 @@ export function LiveOrchestration() {
     roi: <ROIFeed />,
     intelligence: <ContactFeed />,
     agent: <ContactFeed />,
+    escalations: <ContactFeed />,
   };
 
   const pipelineMap: Record<DashboardTab, { activeStage: number; confidence: number; resolutionTime: number; outcome: string }> = {
@@ -299,6 +306,7 @@ export function LiveOrchestration() {
     roi: sim.roiPipeline,
     intelligence: sim.pipeline,
     agent: sim.pipeline,
+    escalations: sim.pipeline,
   };
 
   const metricsMap: Record<DashboardTab, React.ReactNode> = {
@@ -308,6 +316,7 @@ export function LiveOrchestration() {
     roi: <ROIMetrics />,
     intelligence: <ContactMetrics />,
     agent: <ContactMetrics />,
+    escalations: <ContactMetrics />,
   };
 
   return (

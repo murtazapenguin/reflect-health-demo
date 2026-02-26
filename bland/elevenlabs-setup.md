@@ -214,7 +214,10 @@ Use the same demo data as the Bland AI phone agent:
 
 | Scenario | Provider NPI | Zip | Patient | DOB | Claim # | PA ID |
 |----------|-------------|-----|---------|-----|---------|-------|
-| Eligibility | 1003045220 | 95148 | John Smith | 01/15/1985 | — | — |
-| Claims | 1003045220 | 95148 | — | — | CLM-00481922 | — |
-| Prior Auth (approved) | 1003045220 | 95148 | — | — | — | PA-00012399 |
-| Prior Auth (denied) | 1003045220 | 95148 | — | — | — | PA-00012400 |
+| Eligibility | 1003045220 | 94597 | John Smith | 03/04/1982 | — | — |
+| Claims | 1003045220 | 94597 | — | — | CLM-00481922 | — |
+| Prior Auth (approved) | 1003045220 | 94597 | — | — | — | PA-00012345 |
+| Prior Auth (denied) | 1003045220 | 94597 | — | — | — | PA-00012400 |
+| Escalation: Frustration | 1003045220 | 94597 | "Jane Doe" (not found) | 05/05/1990 | — | — |
+| Escalation: Out of scope | — | — | Say "submit a new prior auth" | — | — | — |
+| Escalation: Auth fail | Use invalid NPI "9999999999" | — | — | — | — | — |

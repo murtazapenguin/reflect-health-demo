@@ -13,6 +13,7 @@ import { LiveOrchestration } from "@/components/dashboard/LiveOrchestration";
 import { DashboardFooter } from "@/components/dashboard/Footer";
 import { Module5 } from "@/components/dashboard/Module5";
 import { VoiceAgent } from "@/components/dashboard/VoiceAgent";
+import { Escalations } from "@/components/dashboard/Escalations";
 import { Five9Layout } from "@/components/dashboard/embedded/Five9Layout";
 import { OpynHealthLayout } from "@/components/dashboard/opyn/OpynHealthLayout";
 import { TransitionOverlay } from "@/components/dashboard/embedded/TransitionOverlay";
@@ -51,6 +52,7 @@ function DashboardContent() {
                 {activeTab === "roi" && <ExecutiveROI />}
                 {activeTab === "intelligence" && <Module5 />}
                 {activeTab === "agent" && <VoiceAgent />}
+                {activeTab === "escalations" && <Escalations />}
               </main>
             </div>
             <DashboardFooter />

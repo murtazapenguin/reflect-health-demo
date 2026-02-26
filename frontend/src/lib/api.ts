@@ -58,6 +58,8 @@ export interface CallSummary {
   outcome: string;
   auth_success: boolean | null;
   transferred: boolean;
+  transfer_reason: string | null;
+  source: string;
   tags: string[];
   flagged: boolean;
 }

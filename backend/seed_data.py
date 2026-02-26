@@ -378,10 +378,32 @@ SAMPLE_TRANSCRIPTS = {
         {"speaker": "Provider", "text": "Nope, that's it. Thanks."},
         {"speaker": "AI", "text": "Thank you for calling Reflect Health. Have a great day."},
     ],
-    "transferred": [
+    "transferred_out_of_scope": [
+        {"speaker": "AI", "text": "Thank you for calling Reflect Health provider services. I'm an AI assistant and can help with patient eligibility verification, claim status, or prior authorization lookups. How can I help you today?"},
+        {"speaker": "Provider", "text": "I need to submit a brand new prior authorization for a patient."},
+        {"speaker": "AI", "text": "I can look up existing prior authorizations, but I'm not able to submit new ones. Let me connect you with one of our team members who can help process that submission. One moment please."},
+    ],
+    "transferred_frustration": [
         {"speaker": "AI", "text": "Thank you for calling Reflect Health provider services. I'm an AI assistant and can help with patient eligibility verification or claim status inquiries. Which one brings you in today?"},
-        {"speaker": "Provider", "text": "I need to submit a prior authorization for a patient."},
-        {"speaker": "AI", "text": "I understand you need help with a prior authorization. Let me connect you with a team member who can assist with that. One moment please."},
+        {"speaker": "Provider", "text": "I need to check eligibility for a patient."},
+        {"speaker": "AI", "text": "I'd be happy to help with that. Could you please provide your 10-digit National Provider Identifier?"},
+        {"speaker": "Provider", "text": "It's 1003045220."},
+        {"speaker": "AI", "text": "Thank you, Dr. Sohal. Could you confirm the zip code of your primary practice location?"},
+        {"speaker": "Provider", "text": "94597."},
+        {"speaker": "AI", "text": "You're verified. What is the patient's first and last name, and date of birth?"},
+        {"speaker": "Provider", "text": "It's Jane Doe, born May 5th 1990."},
+        {"speaker": "AI", "text": "I wasn't able to find a member named Jane Doe with that date of birth in our system. Could you double-check the name and date of birth?"},
+        {"speaker": "Provider", "text": "I already told you the name. D-O-E. Jane Doe. This is ridiculous, I've been on hold all day."},
+        {"speaker": "AI", "text": "I understand this is frustrating, and I apologize for the difficulty. Let me connect you with one of our team members who can help you directly. One moment please."},
+    ],
+    "transferred_auth_failed": [
+        {"speaker": "AI", "text": "Thank you for calling Reflect Health provider services. I'm an AI assistant and can help with eligibility, claims, or prior authorizations. How can I help?"},
+        {"speaker": "Provider", "text": "Hi, I need to check on a claim."},
+        {"speaker": "AI", "text": "Sure, I can help with that. Could you please provide your 10-digit National Provider Identifier?"},
+        {"speaker": "Provider", "text": "9999999999."},
+        {"speaker": "AI", "text": "I wasn't able to validate that NPI. Could you try again?"},
+        {"speaker": "Provider", "text": "That's my NPI. I don't know why it's not working. Can you just look it up?"},
+        {"speaker": "AI", "text": "I'm sorry, but I do need to verify your identity before I can share patient information. Let me connect you with a team member who can assist you further."},
     ],
 }
 
@@ -401,45 +423,67 @@ def _generate_call_records(count: int):
         started = started.replace(hour=hour, minute=minute)
 
         roll = random.random()
-        if roll < 0.45:
+        if roll < 0.40:
             intent = "eligibility"
             outcome = "resolved"
             duration = random.randint(45, 120)
             transcript = SAMPLE_TRANSCRIPTS["eligibility_resolved"]
             transferred = False
+            transfer_reason = None
             tags = ["eligibility", "auto-resolved"]
-        elif roll < 0.80:
+        elif roll < 0.70:
             intent = "claims"
             outcome = "resolved"
             duration = random.randint(55, 140)
             transcript = SAMPLE_TRANSCRIPTS["claims_resolved"]
             transferred = False
+            transfer_reason = None
             tags = ["claims", "auto-resolved"]
-        elif roll < 0.92:
+        elif roll < 0.80:
+            intent = "prior_auth"
+            outcome = "resolved"
+            duration = random.randint(50, 130)
+            transcript = SAMPLE_TRANSCRIPTS["eligibility_resolved"]
+            transferred = False
+            transfer_reason = None
+            tags = ["prior_auth", "auto-resolved"]
+        elif roll < 0.88:
             intent = "other"
             outcome = "transferred"
             duration = random.randint(15, 40)
-            transcript = SAMPLE_TRANSCRIPTS["transferred"]
+            transcript = SAMPLE_TRANSCRIPTS["transferred_out_of_scope"]
             transferred = True
-            tags = ["other", "transferred"]
+            transfer_reason = "Request outside AI scope — transferred to human agent"
+            tags = ["other", "escalation"]
+        elif roll < 0.94:
+            intent = random.choice(["eligibility", "claims"])
+            outcome = "transferred"
+            duration = random.randint(60, 120)
+            transcript = SAMPLE_TRANSCRIPTS["transferred_frustration"]
+            transferred = True
+            transfer_reason = "Caller expressed frustration — escalated to human agent"
+            tags = [intent, "escalation", "frustration"]
         else:
             intent = random.choice(["eligibility", "claims"])
             outcome = "transferred"
-            duration = random.randint(30, 80)
-            transcript = SAMPLE_TRANSCRIPTS["transferred"]
+            duration = random.randint(20, 50)
+            transcript = SAMPLE_TRANSCRIPTS["transferred_auth_failed"]
             transferred = True
-            tags = [intent, "transferred"]
+            transfer_reason = "Authentication failed — transferred to human agent"
+            tags = [intent, "escalation", "auth-failed"]
 
-        auth_success = not transferred or random.random() > 0.3
+        auth_success = not transferred or random.random() > 0.5
         provider = random.choice(PROVIDERS)
-        patient = random.choice(MEMBER_NAMES) if not transferred else None
+        patient = random.choice(MEMBER_NAMES) if not transferred or random.random() > 0.5 else None
+        is_elevenlabs = random.random() < 0.25
+        source = "elevenlabs" if is_elevenlabs else "bland"
 
         ended = started + timedelta(seconds=duration)
 
         records.append({
-            "call_id": f"bland_call_{1000 + i:04d}",
-            "phone_from": f"+1555{random.randint(1000000, 9999999)}",
-            "phone_to": "+15559876543",
+            "call_id": f"{'el_' if is_elevenlabs else 'bland_call_'}{1000 + i:04d}",
+            "phone_from": "in-browser" if is_elevenlabs else f"+1555{random.randint(1000000, 9999999)}",
+            "phone_to": "ElevenLabs Agent" if is_elevenlabs else "+15559876543",
             "started_at": started,
             "ended_at": ended,
             "duration_seconds": duration,
@@ -451,9 +495,11 @@ def _generate_call_records(count: int):
             "patient_dob": None,
             "transcript": transcript,
             "recording_url": None,
-            "tags": tags,
-            "flagged": random.random() < 0.06,
+            "tags": [source] + tags,
+            "flagged": transferred or random.random() < 0.04,
             "transferred": transferred,
+            "transfer_reason": transfer_reason,
+            "source": source,
             "auth_success": auth_success,
             "extracted_data": {
                 "npi": provider["npi"],

@@ -194,7 +194,8 @@ def _determine_intent(extracted: Dict[str, Any], transcript_text: str) -> str:
 
 
 def _determine_outcome(extracted: Dict[str, Any], transcript_text: str) -> str:
-    if "transfer" in transcript_text.lower():
+    lower = transcript_text.lower()
+    if "transfer" in lower or "connect you with" in lower or "human agent" in lower or "team member" in lower:
         return "transferred"
     found = extracted.get("found")
     if found is True or str(found).lower() == "true":
@@ -202,6 +203,15 @@ def _determine_outcome(extracted: Dict[str, Any], transcript_text: str) -> str:
     if found is False or str(found).lower() == "false":
         return "not_found"
     return "resolved"
+
+
+def _detect_transfer_reason(transcript_text: str) -> Optional[str]:
+    lower = transcript_text.lower()
+    if any(kw in lower for kw in ["frustrat", "already told you", "this isn't working", "not working", "ridiculous", "talk to someone", "talk to a person", "speak to someone", "let me talk"]):
+        return "Caller expressed frustration — escalated to human agent"
+    if any(kw in lower for kw in ["transfer", "connect you with", "human agent", "team member"]):
+        return "Request outside AI scope — transferred to human agent"
+    return None
 
 
 @router.get("/config", summary="Get ElevenLabs agent ID")
@@ -300,11 +310,14 @@ async def save_conversation(body: SaveConversationRequest):
     intent = _determine_intent(extracted, transcript_text)
     outcome = _determine_outcome(extracted, transcript_text)
 
+    is_transferred = outcome == "transferred"
+    transfer_reason = _detect_transfer_reason(transcript_text) if is_transferred else None
+
     tags = ["elevenlabs", intent]
     if outcome == "resolved":
         tags.append("auto-resolved")
     elif outcome == "transferred":
-        tags.append("transferred")
+        tags.append("escalation")
     elif outcome == "not_found":
         tags.append("not-found")
 
@@ -322,8 +335,10 @@ async def save_conversation(body: SaveConversationRequest):
         patient_name=extracted.get("patient_name"),
         transcript=transcript_entries,
         tags=tags,
-        flagged=False,
-        transferred=outcome == "transferred",
+        flagged=is_transferred,
+        transferred=is_transferred,
+        transfer_reason=transfer_reason,
+        source="elevenlabs",
         auth_success=extracted.get("valid"),
         extracted_data=extracted,
     )

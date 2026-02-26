@@ -23,6 +23,8 @@ class CallRecord(Document):
     tags: List[str] = Field(default_factory=list)
     flagged: bool = False
     transferred: bool = False
+    transfer_reason: Optional[str] = None
+    source: str = "bland"  # bland | elevenlabs
     auth_success: Optional[bool] = None
     extracted_data: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

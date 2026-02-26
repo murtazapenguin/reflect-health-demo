@@ -4,6 +4,7 @@ import { useCallDetail, useUpdateTags, useUpdateFlag } from "@/hooks/use-api";
 import { format } from "date-fns";
 import {
   ArrowLeft, Flag, Phone, Clock, User, ShieldCheck, X, Plus, LogOut,
+  Mic, PhoneForwarded, AlertTriangle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -142,10 +143,26 @@ export default function CallDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div className="flex-1">
-            <h2 className="text-lg font-bold text-foreground">
-              {call.intent === "eligibility" ? "Eligibility Check" : call.intent === "claims" ? "Claims Inquiry" : call.intent === "prior_auth" ? "Prior Auth Request" : "Inbound Call"}
-              {call.provider_name ? ` — ${call.provider_name}` : ""}
-            </h2>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-bold text-foreground">
+                {call.intent === "eligibility" ? "Eligibility Check" : call.intent === "claims" ? "Claims Inquiry" : call.intent === "prior_auth" ? "Prior Auth Request" : "Inbound Call"}
+                {call.provider_name ? ` — ${call.provider_name}` : ""}
+              </h2>
+              {(call.source === "elevenlabs" || call.call_id?.startsWith("el_")) ? (
+                <Badge className="bg-purple-100 text-purple-700 text-[9px] border border-purple-200">
+                  <Mic className="h-2.5 w-2.5 mr-1" /> In-Browser
+                </Badge>
+              ) : (
+                <Badge className="bg-gray-100 text-gray-600 text-[9px] border border-gray-200">
+                  <Phone className="h-2.5 w-2.5 mr-1" /> Phone
+                </Badge>
+              )}
+              {call.transferred && (
+                <Badge className="bg-amber-100 text-amber-700 text-[9px] border border-amber-200">
+                  <PhoneForwarded className="h-2.5 w-2.5 mr-1" /> Escalated
+                </Badge>
+              )}
+            </div>
             <p className="type-micro text-muted-foreground">
               {fmtDate(call.started_at)}{call.patient_name ? ` · Patient: ${call.patient_name}` : ""}
             </p>
@@ -299,14 +316,39 @@ export default function CallDetailPage() {
 
             {call.transferred && (
               <Card className="border-amber-200 bg-amber-50/50">
-                <CardHeader className="pb-2"><CardTitle className="text-sm text-amber-800">Transfer Context</CardTitle></CardHeader>
-                <CardContent>
-                  <p className="text-xs text-amber-700 leading-relaxed">
-                    Call was transferred to a human agent.
-                    {call.provider_name && ` Provider: ${call.provider_name}.`}
-                    {call.intent && ` Original intent: ${call.intent}.`}
-                    {call.auth_success && " Provider was authenticated."}
-                  </p>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-amber-800 flex items-center gap-2">
+                    <PhoneForwarded className="h-4 w-4" />
+                    Escalation Details
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2.5">
+                  {call.transfer_reason && (
+                    <div className="flex items-start gap-2 p-2 rounded-md bg-amber-100/50 border border-amber-200">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-700 shrink-0 mt-0.5" />
+                      <p className="text-xs font-medium text-amber-800">{call.transfer_reason}</p>
+                    </div>
+                  )}
+                  <dl className="space-y-1.5">
+                    {call.provider_name && (
+                      <div className="flex justify-between">
+                        <dt className="type-micro text-amber-700">Provider</dt>
+                        <dd className="text-xs font-medium text-amber-800">{call.provider_name}</dd>
+                      </div>
+                    )}
+                    {call.intent && (
+                      <div className="flex justify-between">
+                        <dt className="type-micro text-amber-700">Original Intent</dt>
+                        <dd className="text-xs font-medium text-amber-800">{call.intent.replace("_", " ")}</dd>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <dt className="type-micro text-amber-700">Auth Status</dt>
+                      <dd className="text-xs font-medium text-amber-800">
+                        {call.auth_success ? "Authenticated" : call.auth_success === false ? "Failed" : "Not attempted"}
+                      </dd>
+                    </div>
+                  </dl>
                 </CardContent>
               </Card>
             )}

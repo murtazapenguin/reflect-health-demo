@@ -64,6 +64,8 @@ async def get_call_log(
             tags=r.tags,
             flagged=r.flagged,
             transferred=r.transferred,
+            transfer_reason=r.transfer_reason,
+            source=getattr(r, "source", "bland"),
         )
         for r in records
     ]
@@ -101,6 +103,8 @@ async def get_call_detail(call_id: str) -> Optional[CallDetail]:
         tags=record.tags,
         flagged=record.flagged,
         transferred=record.transferred,
+        transfer_reason=record.transfer_reason,
+        source=getattr(record, "source", "bland"),
         auth_success=record.auth_success,
         extracted_data=record.extracted_data,
     )
