@@ -34,6 +34,9 @@ class Settings(BaseSettings):
 
     bland_webhook_secret: str = ""
 
+    elevenlabs_api_key: str = ""
+    elevenlabs_agent_id: str = ""
+
     log_level: str = "INFO"
 
     @property

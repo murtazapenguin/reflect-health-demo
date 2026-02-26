@@ -38,6 +38,7 @@ def create_app() -> FastAPI:
 
     from app.modules.auth.routes import router as auth_router
     from app.modules.dashboard.routes import router as dashboard_router
+    from app.modules.elevenlabs.routes import router as elevenlabs_router
     from app.modules.health.routes import router as health_router
     from app.modules.voice.routes import router as voice_router
     from app.modules.webhooks.routes import router as webhooks_router
@@ -47,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(voice_router, prefix=f"{settings.api_v1_prefix}/voice", tags=["voice"])
     app.include_router(webhooks_router, prefix=f"{settings.api_v1_prefix}/webhooks", tags=["webhooks"])
     app.include_router(dashboard_router, prefix=f"{settings.api_v1_prefix}/dashboard", tags=["dashboard"])
+    app.include_router(elevenlabs_router, prefix=f"{settings.api_v1_prefix}/elevenlabs", tags=["elevenlabs"])
 
     return app
 
