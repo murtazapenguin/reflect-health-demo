@@ -34,7 +34,7 @@ export function VoiceAgent() {
   const navigate = useNavigate();
 
   const isEndingRef = useRef(false);
-  const [shouldAutoEnd, setShouldAutoEnd] = useState(false);
+  const shouldAutoEndRef = useRef(false);
 
   const conversation = useConversation({
     onConnect: ({ conversationId: connId }) => {
@@ -44,7 +44,7 @@ export function VoiceAgent() {
       startTimeRef.current = new Date();
       setSavedCallId(null);
       isEndingRef.current = false;
-      setShouldAutoEnd(false);
+      shouldAutoEndRef.current = false;
     },
     onDisconnect: () => {
       if (!isEndingRef.current && messages.length > 0) {
@@ -63,7 +63,7 @@ export function VoiceAgent() {
           const isTransfer = lower.includes("connect you with") || lower.includes("transfer you to") || lower.includes("team member who can");
           const isGoodbye = lower.includes("have a great day") || lower.includes("goodbye");
           if (isTransfer || isGoodbye) {
-            setShouldAutoEnd(true);
+            shouldAutoEndRef.current = true;
           }
         }
 
@@ -87,17 +87,19 @@ export function VoiceAgent() {
     }
   }, [messages]);
 
-  // Auto-end the call once the agent finishes speaking the transfer/goodbye message
+  // Poll to auto-end the call once the agent finishes speaking a transfer/goodbye message
   useEffect(() => {
-    if (shouldAutoEnd && !conversation.isSpeaking && conversation.status === "connected" && !isEndingRef.current) {
-      const timer = setTimeout(() => {
-        if (!isEndingRef.current) {
-          endConversation();
-        }
-      }, 1500);
-      return () => clearTimeout(timer);
-    }
-  }, [shouldAutoEnd, conversation.isSpeaking, conversation.status, endConversation]);
+    if (conversation.status !== "connected") return;
+    const interval = setInterval(() => {
+      if (shouldAutoEndRef.current && !conversation.isSpeaking && !isEndingRef.current) {
+        clearInterval(interval);
+        isEndingRef.current = true;
+        conversation.endSession().then(() => saveAndCleanup());
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation.status]);
 
   const startConversation = useCallback(async () => {
     setIsConnecting(true);
