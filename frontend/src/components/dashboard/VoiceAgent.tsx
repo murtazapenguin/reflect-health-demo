@@ -33,6 +33,9 @@ export function VoiceAgent() {
   const startTimeRef = useRef<Date | null>(null);
   const navigate = useNavigate();
 
+  const autoEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isEndingRef = useRef(false);
+
   const conversation = useConversation({
     onConnect: ({ conversationId: connId }) => {
       setIsConnecting(false);
@@ -40,9 +43,14 @@ export function VoiceAgent() {
       setConversationId(connId);
       startTimeRef.current = new Date();
       setSavedCallId(null);
+      isEndingRef.current = false;
     },
     onDisconnect: () => {
-      // Save triggered explicitly by endConversation, not here
+      // If the agent ended the call (not user), trigger save
+      if (!isEndingRef.current && messages.length > 0) {
+        isEndingRef.current = true;
+        saveAndCleanup();
+      }
     },
     onMessage: (msg) => {
       const role: "user" | "agent" = msg.role === "user" ? "user" : "agent";
@@ -50,6 +58,20 @@ export function VoiceAgent() {
         ...prev,
         { role, text: msg.message, timestamp: new Date(), isFinal: true },
       ]);
+
+      if (role === "agent") {
+        const lower = msg.message.toLowerCase();
+        const isTransfer = lower.includes("connect you with") || lower.includes("transfer you") || lower.includes("team member");
+        const isGoodbye = lower.includes("have a great day") || lower.includes("thank you for calling") || lower.includes("goodbye");
+        if (isTransfer || isGoodbye) {
+          if (autoEndTimerRef.current) clearTimeout(autoEndTimerRef.current);
+          autoEndTimerRef.current = setTimeout(() => {
+            if (!isEndingRef.current) {
+              endConversation();
+            }
+          }, 3000);
+        }
+      }
     },
     onError: (err) => {
       const msg = typeof err === "string" ? err : (err as any)?.message || "Connection error";
@@ -67,6 +89,12 @@ export function VoiceAgent() {
       transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
     }
   }, [messages]);
+
+  useEffect(() => {
+    return () => {
+      if (autoEndTimerRef.current) clearTimeout(autoEndTimerRef.current);
+    };
+  }, []);
 
   const startConversation = useCallback(async () => {
     setIsConnecting(true);
@@ -94,11 +122,9 @@ export function VoiceAgent() {
     }
   }, [conversation]);
 
-  const endConversation = useCallback(async () => {
+  const saveAndCleanup = useCallback(async () => {
     const currentMessages = [...messages];
     const convId = conversationId;
-
-    await conversation.endSession();
 
     if (currentMessages.length === 0) return;
 
@@ -122,7 +148,16 @@ export function VoiceAgent() {
     } finally {
       setIsSaving(false);
     }
-  }, [conversation, messages, conversationId]);
+  }, [messages, conversationId]);
+
+  const endConversation = useCallback(async () => {
+    if (isEndingRef.current) return;
+    isEndingRef.current = true;
+    if (autoEndTimerRef.current) clearTimeout(autoEndTimerRef.current);
+
+    await conversation.endSession();
+    await saveAndCleanup();
+  }, [conversation, saveAndCleanup]);
 
   const isActive = conversation.status === "connected";
 

@@ -179,23 +179,77 @@ def _merge_tool_result(extracted: Dict, name: str, params: Dict, result: Dict):
         extracted["notes"] = result.get("notes")
 
 
-def _determine_intent(extracted: Dict[str, Any], transcript_text: str) -> str:
+def _detect_auth_success(
+    extracted: Dict[str, Any],
+    agent_text: str,
+) -> Optional[bool]:
+    """Determine auth status from extracted data or agent transcript."""
+    valid = extracted.get("valid")
+    if valid is not None:
+        return bool(valid) if isinstance(valid, bool) else str(valid).lower() == "true"
+
+    lower = agent_text.lower()
+    if "you're verified" in lower or "you are verified" in lower or "verification complete" in lower:
+        return True
+    if "zip verified" in lower or "zip confirmed" in lower:
+        return True
+    # Agent addressed the provider by name after auth → likely authenticated
+    if extracted.get("provider_name") and extracted["provider_name"].lower() in lower:
+        return True
+    if "wasn't able to validate" in lower or "unable to verify" in lower or "invalid npi" in lower:
+        return False
+    return None
+
+
+def _split_transcript_by_role(
+    transcript_entries: List[Dict],
+) -> tuple[str, str]:
+    """Split transcript into user-only and agent-only text."""
+    user_parts = []
+    agent_parts = []
+    for e in transcript_entries:
+        speaker = (e.get("speaker") or "").lower()
+        text = e.get("text", "")
+        if speaker in ("provider", "user"):
+            user_parts.append(text)
+        elif speaker in ("ai", "agent", "assistant"):
+            agent_parts.append(text)
+    return " ".join(user_parts), " ".join(agent_parts)
+
+
+def _determine_intent(
+    extracted: Dict[str, Any],
+    user_text: str,
+    full_text: str,
+) -> str:
     intent = extracted.get("call_intent", "")
     if intent:
         return intent
-    lower = transcript_text.lower()
-    if "eligib" in lower or "coverage" in lower:
-        return "eligibility"
+    # Check user messages first for what they actually asked about
+    lower = user_text.lower()
+    if "prior auth" in lower or "authorization" in lower:
+        return "prior_auth"
     if "claim" in lower:
         return "claims"
-    if "prior auth" in lower:
+    if "eligib" in lower or "coverage" in lower:
+        return "eligibility"
+    # Fall back to full transcript (less reliable due to agent greetings)
+    full_lower = full_text.lower()
+    if "prior auth" in full_lower or "authorization" in full_lower:
         return "prior_auth"
+    if "claim" in full_lower:
+        return "claims"
+    if "eligib" in full_lower or "coverage" in full_lower:
+        return "eligibility"
     return "general"
 
 
-def _determine_outcome(extracted: Dict[str, Any], transcript_text: str) -> str:
-    lower = transcript_text.lower()
-    if "transfer" in lower or "connect you with" in lower or "human agent" in lower or "team member" in lower:
+def _determine_outcome(
+    extracted: Dict[str, Any],
+    agent_text: str,
+) -> str:
+    lower = agent_text.lower()
+    if "connect you with" in lower or "transfer" in lower or "team member" in lower or "human agent" in lower:
         return "transferred"
     found = extracted.get("found")
     if found is True or str(found).lower() == "true":
@@ -205,12 +259,37 @@ def _determine_outcome(extracted: Dict[str, Any], transcript_text: str) -> str:
     return "resolved"
 
 
-def _detect_transfer_reason(transcript_text: str) -> Optional[str]:
-    lower = transcript_text.lower()
-    if any(kw in lower for kw in ["frustrat", "already told you", "this isn't working", "not working", "ridiculous", "talk to someone", "talk to a person", "speak to someone", "let me talk"]):
+def _detect_transfer_reason(
+    user_text: str,
+    agent_text: str,
+) -> Optional[str]:
+    user_lower = user_text.lower()
+
+    # Check if the USER expressed frustration
+    frustration_keywords = [
+        "already told you", "this isn't working", "not working", "ridiculous",
+        "talk to someone", "talk to a person", "speak to someone", "let me talk",
+        "this is frustrating", "waste of time", "unacceptable",
+    ]
+    if any(kw in user_lower for kw in frustration_keywords):
         return "Caller expressed frustration — escalated to human agent"
-    if any(kw in lower for kw in ["transfer", "connect you with", "human agent", "team member"]):
+
+    # Check if user asked for something out of scope
+    scope_keywords = [
+        "submit", "file a new", "create a new", "new prior auth",
+        "submit a prior", "file an appeal", "update my", "change my",
+    ]
+    if any(kw in user_lower for kw in scope_keywords):
         return "Request outside AI scope — transferred to human agent"
+
+    # Check if auth failed
+    agent_lower = agent_text.lower()
+    if "wasn't able to validate" in agent_lower or "unable to verify" in agent_lower:
+        return "Authentication failed — transferred to human agent"
+
+    # Generic transfer
+    if "connect you with" in agent_lower or "team member" in agent_lower:
+        return "Transferred to human agent"
     return None
 
 
@@ -307,11 +386,13 @@ async def save_conversation(body: SaveConversationRequest):
         else:
             logger.warning("Could not fetch ElevenLabs details for {}", body.conversation_id)
 
-    intent = _determine_intent(extracted, transcript_text)
-    outcome = _determine_outcome(extracted, transcript_text)
+    user_text, agent_text = _split_transcript_by_role(transcript_entries)
+
+    intent = _determine_intent(extracted, user_text, transcript_text)
+    outcome = _determine_outcome(extracted, agent_text)
 
     is_transferred = outcome == "transferred"
-    transfer_reason = _detect_transfer_reason(transcript_text) if is_transferred else None
+    transfer_reason = _detect_transfer_reason(user_text, agent_text) if is_transferred else None
 
     tags = ["elevenlabs", intent]
     if outcome == "resolved":
@@ -339,7 +420,7 @@ async def save_conversation(body: SaveConversationRequest):
         transferred=is_transferred,
         transfer_reason=transfer_reason,
         source="elevenlabs",
-        auth_success=extracted.get("valid"),
+        auth_success=_detect_auth_success(extracted, agent_text),
         extracted_data=extracted,
     )
     await record.insert()
