@@ -110,14 +110,26 @@ export function VoiceAgent() {
     setIsConnecting(false);
   }, []);
 
+  const onStatusChange = useCallback(({ status }: { status: string }) => {
+    // #region agent log
+    console.log("[DBG] onStatusChange:", status);
+    // #endregion
+  }, []);
+
+  const onDebug = useCallback((evt: any) => {
+    // #region agent log
+    console.log("[DBG] onDebug:", evt?.type || "unknown", evt);
+    // #endregion
+  }, []);
+
   const hookOptions = useMemo(() => ({
     onConnect,
     onDisconnect,
     onMessage,
     onError,
-    micMuted,
-    volume,
-  }), [onConnect, onDisconnect, onMessage, onError, micMuted, volume]);
+    onStatusChange,
+    onDebug,
+  }), [onConnect, onDisconnect, onMessage, onError, onStatusChange, onDebug]);
 
   const conversation = useConversation(hookOptions);
 
@@ -131,15 +143,6 @@ export function VoiceAgent() {
     setIsConnecting(true);
     setError(null);
     setMessages([]);
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((t) => t.stop());
-    } catch {
-      setError("Microphone access is required. Please allow microphone access and try again.");
-      setIsConnecting(false);
-      return;
-    }
 
     try {
       // #region agent log
