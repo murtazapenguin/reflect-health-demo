@@ -1,9 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { useConversation } from "@elevenlabs/react";
 import {
   Mic, MicOff, PhoneOff, Volume2, VolumeX, Loader2,
-  MessageSquare, Bot, User, AlertCircle, Phone, ExternalLink, CheckCircle,
+  MessageSquare, Bot, User, AlertCircle, Phone,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { api } from "@/lib/api";
 import penguinLogo from "@/assets/penguin-ai-logo.png";
-import { DemoDataReference } from "./DemoDataReference";
 
 interface Message {
   role: "user" | "agent";
@@ -27,22 +25,15 @@ export function VoiceAgent() {
   const [volume, setVolume] = useState(0.8);
   const [micMuted, setMicMuted] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
-  const [savedCallId, setSavedCallId] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
-  const startTimeRef = useRef<Date | null>(null);
-  const navigate = useNavigate();
 
   const conversation = useConversation({
     onConnect: () => {
       setIsConnecting(false);
       setError(null);
-      startTimeRef.current = new Date();
-      setSavedCallId(null);
     },
     onDisconnect: () => {
-      // Save is triggered explicitly after endSession, not here,
-      // to avoid blocking the disconnect callback.
+      setConversationId(null);
     },
     onMessage: (message) => {
       if (message.type === "transcript" && message.role) {
@@ -106,35 +97,9 @@ export function VoiceAgent() {
   }, [conversation]);
 
   const endConversation = useCallback(async () => {
-    const finalMessages = messages.filter((m) => m.isFinal);
-    const convId = conversationId;
-
     await conversation.endSession();
     setConversationId(null);
-
-    if (finalMessages.length === 0) return;
-
-    setIsSaving(true);
-    const duration = startTimeRef.current
-      ? Math.round((Date.now() - startTimeRef.current.getTime()) / 1000)
-      : 0;
-
-    try {
-      const result = await api.saveElevenLabsConversation({
-        conversation_id: convId,
-        transcript: finalMessages.map((m) => ({
-          speaker: m.role === "agent" ? "agent" : "user",
-          text: m.text,
-        })),
-        duration_seconds: duration,
-      });
-      setSavedCallId(result.call_id);
-    } catch (err: any) {
-      console.error("Failed to save conversation:", err);
-    } finally {
-      setIsSaving(false);
-    }
-  }, [conversation, messages, conversationId]);
+  }, [conversation]);
 
   const isActive = conversation.status === "connected";
 
@@ -356,36 +321,7 @@ export function VoiceAgent() {
                     </dd>
                   </div>
                 )}
-                {(isSaving || savedCallId) && (
-                  <div className="flex justify-between items-center">
-                    <dt className="type-micro text-muted-foreground">Call Log</dt>
-                    <dd>
-                      {isSaving ? (
-                        <Badge className="bg-amber-100 text-amber-700 text-[9px]">
-                          <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
-                          Saving...
-                        </Badge>
-                      ) : (
-                        <Badge className="bg-emerald-100 text-emerald-700 text-[9px]">
-                          <CheckCircle className="h-2.5 w-2.5 mr-1" />
-                          Saved
-                        </Badge>
-                      )}
-                    </dd>
-                  </div>
-                )}
               </dl>
-              {savedCallId && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full mt-3 text-xs"
-                  onClick={() => navigate(`/calls/${savedCallId}`)}
-                >
-                  <ExternalLink className="h-3 w-3 mr-1.5" />
-                  View in Call Log
-                </Button>
-              )}
             </CardContent>
           </Card>
 
@@ -440,8 +376,6 @@ export function VoiceAgent() {
           )}
         </div>
       </div>
-
-      <DemoDataReference />
     </div>
   );
 }
