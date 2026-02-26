@@ -3,7 +3,7 @@ import { useSimulation, type SimEvent, type ClaimsEvent, type NetworkEvent, type
 import { useDashboard, type DashboardTab } from "@/contexts/DashboardContext";
 import { CountUpValue } from "./CountUpValue";
 import { fmtCurrency, fmtDecimal } from "@/lib/format";
-import { Phone, FileText, Globe, TrendingUp, Zap, Users, DollarSign, ArrowRight, ShieldCheck, AlertTriangle, CheckCircle, Mic } from "lucide-react";
+import { Phone, FileText, Globe, TrendingUp, Zap, Users, DollarSign, ArrowRight, ShieldCheck, AlertTriangle, CheckCircle } from "lucide-react";
 import { InteractionDetailModal } from "./InteractionDetailModal";
 
 /* ─── Tab Config ─── */
@@ -43,12 +43,6 @@ const TAB_CONFIG: Record<DashboardTab, {
     subtitle: "Upload → Transcribe → Analyze → Automate",
     icon: <Zap className="h-3.5 w-3.5" />,
     pipelineStages: ["Audio Upload", "STT Transcription", "Intent Detection", "AI Analysis", "Scenario Creation", "KB Trained"],
-  },
-  agent: {
-    title: "Live Voice Agent",
-    subtitle: "In-Browser Conversational AI",
-    icon: <Mic className="h-3.5 w-3.5" />,
-    pipelineStages: ["Mic Input", "Speech-to-Text", "Intent Detection", "Backend Lookup", "Response Generation", "Text-to-Speech"],
   },
 };
 
@@ -289,7 +283,6 @@ export function LiveOrchestration() {
     network: <NetworkFeed />,
     roi: <ROIFeed />,
     intelligence: <ContactFeed />,
-    agent: <ContactFeed />,
   };
 
   const pipelineMap: Record<DashboardTab, { activeStage: number; confidence: number; resolutionTime: number; outcome: string }> = {
@@ -298,7 +291,6 @@ export function LiveOrchestration() {
     network: sim.networkPipeline,
     roi: sim.roiPipeline,
     intelligence: sim.pipeline,
-    agent: sim.pipeline,
   };
 
   const metricsMap: Record<DashboardTab, React.ReactNode> = {
@@ -307,7 +299,6 @@ export function LiveOrchestration() {
     network: <NetworkMetrics />,
     roi: <ROIMetrics />,
     intelligence: <ContactMetrics />,
-    agent: <ContactMetrics />,
   };
 
   return (

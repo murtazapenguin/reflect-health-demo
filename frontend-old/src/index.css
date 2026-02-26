@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 235 20% 98%;
+    --foreground: 220 20% 14%;
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 14%;
+    --primary: 335 100% 60%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 20% 30%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 10% 46%;
+    --accent: 20 90% 55%;
+    --accent-foreground: 0 0% 100%;
+    --border: 240 10% 93%;
+    --ring: 335 100% 60%;
+    --reflect-pink: 335 100% 60%;
+    --reflect-orange: 20 90% 55%;
+    --opyn-green: 158 64% 52%;
+    --opyn-purple: 265 60% 55%;
+  }
+
+  html {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+}
+
+@layer components {
+  .reflect-gradient {
+    background: linear-gradient(135deg, hsl(var(--reflect-pink)), hsl(var(--reflect-orange)));
+  }
+
+  .reflect-gradient-text {
+    background: linear-gradient(135deg, hsl(var(--reflect-pink)), hsl(var(--reflect-orange)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .reflect-border {
+    border-color: hsl(var(--reflect-pink) / .2);
+  }
+
+  .metric-card {
+    border-width: 1px;
+    background-color: hsl(var(--card));
+    padding: 1rem;
+    border-radius: 16px;
+    border-color: #ebebef;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  }
+
+  .metric-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    border-color: hsl(var(--reflect-pink) / .3);
+    transition: all 0.2s ease;
+  }
+
+  .type-micro {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.4px;
+  }
+
+  .sidebar-glass {
+    background: hsl(var(--card));
+    border-right: 1px solid hsl(var(--border));
+  }
+
+  .feed-item-enter {
+    animation: feed-slide-in 0.3s ease-out;
+  }
+
+  @keyframes feed-slide-in {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+}

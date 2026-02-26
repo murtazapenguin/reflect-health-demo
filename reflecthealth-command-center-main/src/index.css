@@ -1,0 +1,451 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@layer base {
+  :root {
+    --background: 235 20% 98%;
+    --foreground: 220 20% 14%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 20% 14%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 20% 14%;
+
+    --primary: 335 100% 60%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 220 20% 30%;
+
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 10% 46%;
+
+    --accent: 20 90% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 10% 93%;
+    --input: 240 10% 93%;
+    --ring: 335 100% 60%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 220 20% 14%;
+    --sidebar-primary: 335 100% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 220 20% 30%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 335 100% 60%;
+
+    /* Custom tokens */
+    --metric-positive: 335 100% 60%;
+    --metric-negative: 0 72% 51%;
+    --metric-neutral: 45 90% 50%;
+    --surface-elevated: 230 16% 96%;
+    --glow-primary: 335 100% 60%;
+
+    /* Section container */
+    --section-bg: 230 20% 96%;
+
+    /* Semantic micro-colors */
+    --semantic-identity: 253 70% 70%;
+    --semantic-coverage: 152 40% 50%;
+    --semantic-claims: 216 90% 63%;
+    --semantic-financial: 335 100% 60%;
+
+    /* Tinted metric backgrounds */
+    --tint-savings: 335 60% 97%;
+    --tint-fte: 265 40% 97%;
+    --tint-calls: 25 60% 97%;
+
+    /* Reflect gradient */
+    --reflect-pink: 335 100% 60%;
+    --reflect-orange: 20 90% 55%;
+
+    /* Status colors */
+    --status-ai: 335 100% 60%;
+    --status-human: 220 14% 50%;
+    --status-escalation: 38 92% 50%;
+    --status-resolved: 160 60% 45%;
+
+    /* Five9 embedded theme */
+    --five9-navy: 220 60% 20%;
+    --five9-dark: 220 50% 15%;
+    --five9-accent: 210 100% 50%;
+    --five9-muted: 220 15% 55%;
+
+    /* Opyn Health theme */
+    --opyn-green: 158 64% 52%;
+    --opyn-green-light: 158 64% 95%;
+    --opyn-purple: 265 60% 55%;
+    --opyn-purple-light: 265 60% 96%;
+    --opyn-bg: 220 20% 98%;
+    --opyn-card: 0 0% 100%;
+    --opyn-muted: 220 10% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+@layer components {
+  /* ── Typography Scale ────────────────────────── */
+
+  /* Display XL — Hero financial metrics */
+  .type-display {
+    font-size: 40px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  /* H2 — Section headers */
+  .type-h2 {
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  /* H3 — Module / card titles */
+  .type-h3 {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    line-height: 1.4;
+  }
+
+  /* Body Large — feed items, response text */
+  .type-body-lg {
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1.5;
+  }
+
+  /* Body Standard — metadata, secondary info */
+  .type-body {
+    font-size: 13px;
+    font-weight: 400;
+    line-height: 1.5;
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* Micro / Status — badges, labels */
+  .type-micro {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.4px;
+  }
+
+  /* KPI Sidebar metric value */
+  .type-kpi-value {
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    line-height: 1.1;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Five9 confidence value */
+  .type-confidence {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    line-height: 1;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ── Cards ────────────────────────────────────── */
+  .metric-card {
+    @apply bg-card p-4 border;
+    border-radius: 16px;
+    border-color: hsl(240 10% 93%);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  }
+
+  .metric-value {
+    font-size: 40px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+    font-family: 'JetBrains Mono', monospace;
+    color: hsl(var(--primary));
+  }
+
+  .metric-label {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+
+  .metric-positive {
+    color: hsl(var(--primary));
+  }
+
+  .metric-negative {
+    color: hsl(var(--metric-negative));
+  }
+
+  .module-panel {
+    @apply bg-card border overflow-hidden;
+    border-radius: 16px;
+    border-color: hsl(240 10% 93%);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+  }
+
+  /* Section container grouping */
+  .section-container {
+    background: hsl(var(--section-bg));
+    border-radius: 20px;
+    padding: 24px;
+  }
+
+  /* Semantic left border accents */
+  .semantic-border-identity { border-left: 4px solid hsl(var(--semantic-identity)); }
+  .semantic-border-coverage { border-left: 4px solid hsl(var(--semantic-coverage)); }
+  .semantic-border-claims { border-left: 4px solid hsl(var(--semantic-claims)); }
+  .semantic-border-financial { border-left: 4px solid hsl(var(--semantic-financial)); }
+
+  /* Tinted metric backgrounds */
+  .tint-savings { background: hsl(var(--tint-savings)); }
+  .tint-fte { background: hsl(var(--tint-fte)); }
+  .tint-calls { background: hsl(var(--tint-calls)); }
+
+  /* Section header accent bar */
+  .section-header-accent {
+    @apply flex items-center gap-2;
+  }
+  .section-header-accent::before {
+    content: '';
+    display: block;
+    width: 4px;
+    height: 20px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, hsl(335 100% 60%), hsl(20 90% 55%));
+    flex-shrink: 0;
+  }
+
+  /* Status badge pulse */
+  @keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  .status-badge-pulse {
+    animation: status-pulse 2s ease-in-out infinite;
+  }
+
+  /* Live impact background animation */
+  @keyframes live-impact-drift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .live-impact-bg {
+    position: relative;
+  }
+  .live-impact-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      hsl(335 100% 60% / 0.04) 20%,
+      hsl(20 90% 55% / 0.03) 40%,
+      hsl(335 100% 60% / 0.05) 60%,
+      hsl(20 90% 55% / 0.03) 80%,
+      transparent 100%);
+    background-size: 200% 100%;
+    animation: live-impact-drift 10s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .module-header {
+    @apply px-5 py-3 border-b border-border flex items-center justify-between;
+    background: hsl(var(--surface-elevated));
+  }
+
+  .glow-text {
+    color: hsl(var(--primary));
+    text-shadow: 0 0 12px hsl(var(--glow-primary) / 0.15);
+  }
+
+  .status-dot {
+    @apply w-1.5 h-1.5 rounded-full;
+    background: hsl(var(--primary));
+    box-shadow: 0 0 6px hsl(var(--primary) / 0.3);
+  }
+
+  .drawer-overlay {
+    @apply fixed inset-0 bg-black/30 z-40;
+  }
+
+  /* Reflect gradient */
+  .reflect-gradient {
+    background: linear-gradient(135deg, hsl(var(--reflect-pink)), hsl(var(--reflect-orange)));
+  }
+
+  .reflect-gradient-text {
+    background: linear-gradient(135deg, hsl(var(--reflect-pink)), hsl(var(--reflect-orange)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .reflect-border {
+    border-color: hsl(var(--reflect-pink) / 0.2);
+  }
+
+  /* Tab underline animation */
+  .tab-underline {
+    @apply relative;
+  }
+  .tab-underline::after {
+    content: '';
+    @apply absolute bottom-0 left-0 w-full h-0.5 transform scale-x-0 transition-transform duration-300 origin-left;
+    background: linear-gradient(90deg, hsl(var(--reflect-pink)), hsl(var(--reflect-orange)));
+  }
+  .tab-underline[data-state="active"]::after,
+  .tab-underline.active::after {
+    @apply scale-x-100;
+  }
+
+  /* Activity feed */
+  @keyframes feed-slide-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .feed-item-enter {
+    animation: feed-slide-in 0.3s ease-out;
+  }
+
+  /* Pipeline stage glow */
+  @keyframes stage-glow {
+    0% { opacity: 0.3; }
+    50% { opacity: 1; }
+    100% { opacity: 0.3; }
+  }
+  .stage-active {
+    animation: stage-glow 1.5s ease-in-out infinite;
+  }
+
+  /* Savings pulse */
+  @keyframes savings-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.03); }
+    100% { transform: scale(1); }
+  }
+  .savings-pulse {
+    animation: savings-pulse 0.6s ease-out;
+  }
+
+  /* Count shimmer */
+  @keyframes count-shimmer {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+  }
+
+  /* Sync spin */
+  @keyframes sync-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .sync-spinning {
+    animation: sync-spin 1s linear infinite;
+  }
+
+  /* Subtle flowing lines */
+  @keyframes flow-lines {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+  .flow-bg {
+    background: linear-gradient(90deg, 
+      transparent 0%, 
+      hsl(var(--reflect-pink) / 0.03) 25%, 
+      hsl(var(--reflect-orange) / 0.02) 50%, 
+      hsl(var(--reflect-pink) / 0.03) 75%, 
+      transparent 100%);
+    background-size: 200% 200%;
+    animation: flow-lines 8s ease-in-out infinite;
+  }
+
+  /* Sequential stage lighting */
+  @keyframes stage-light {
+    0%, 100% { opacity: 0.4; background: hsl(var(--muted)); }
+    20%, 80% { opacity: 1; background: linear-gradient(135deg, hsl(var(--reflect-pink)), hsl(var(--reflect-orange))); }
+  }
+
+  /* ===== Five9 Embedded Mode ===== */
+  .five9-bg {
+    background: hsl(220 20% 95%);
+  }
+
+  .five9-header {
+    background: linear-gradient(135deg, hsl(var(--five9-dark)), hsl(var(--five9-navy)));
+  }
+
+  .five9-sidebar {
+    background: hsl(var(--five9-dark));
+    border-right: 1px solid hsl(var(--five9-navy));
+  }
+
+  .five9-panel-bg {
+    background: hsl(0 0% 100%);
+  }
+
+  .five9-card {
+    @apply rounded border border-border bg-card;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .five9-border {
+    border-color: hsl(var(--border));
+  }
+
+  .five9-active-border {
+    border-color: hsl(var(--five9-accent) / 0.3);
+    box-shadow: 0 0 0 1px hsl(var(--five9-accent) / 0.1);
+  }
+
+  .five9-accent-bg {
+    background: hsl(var(--five9-accent));
+  }
+
+  .text-five9-accent {
+    color: hsl(var(--five9-accent));
+  }
+
+  .text-five9-muted {
+    color: hsl(var(--five9-muted));
+  }
+
+  .bg-five9-accent\/10 {
+    background: hsl(var(--five9-accent) / 0.1);
+  }
+}
