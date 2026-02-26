@@ -33,8 +33,8 @@ export function VoiceAgent() {
   const startTimeRef = useRef<Date | null>(null);
   const navigate = useNavigate();
 
-  const autoEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isEndingRef = useRef(false);
+  const [shouldAutoEnd, setShouldAutoEnd] = useState(false);
 
   const conversation = useConversation({
     onConnect: ({ conversationId: connId }) => {
@@ -44,9 +44,9 @@ export function VoiceAgent() {
       startTimeRef.current = new Date();
       setSavedCallId(null);
       isEndingRef.current = false;
+      setShouldAutoEnd(false);
     },
     onDisconnect: () => {
-      // If the agent ended the call (not user), trigger save
       if (!isEndingRef.current && messages.length > 0) {
         isEndingRef.current = true;
         saveAndCleanup();
@@ -57,19 +57,13 @@ export function VoiceAgent() {
       setMessages((prev) => {
         const updated = [...prev, { role, text: msg.message, timestamp: new Date(), isFinal: true }];
 
-        // Only auto-end after the user has spoken at least once (skip agent greeting)
         const userHasSpoken = updated.some((m) => m.role === "user");
         if (role === "agent" && userHasSpoken) {
           const lower = msg.message.toLowerCase();
           const isTransfer = lower.includes("connect you with") || lower.includes("transfer you to") || lower.includes("team member who can");
           const isGoodbye = lower.includes("have a great day") || lower.includes("goodbye");
           if (isTransfer || isGoodbye) {
-            if (autoEndTimerRef.current) clearTimeout(autoEndTimerRef.current);
-            autoEndTimerRef.current = setTimeout(() => {
-              if (!isEndingRef.current) {
-                endConversation();
-              }
-            }, 4000);
+            setShouldAutoEnd(true);
           }
         }
 
@@ -93,11 +87,17 @@ export function VoiceAgent() {
     }
   }, [messages]);
 
+  // Auto-end the call once the agent finishes speaking the transfer/goodbye message
   useEffect(() => {
-    return () => {
-      if (autoEndTimerRef.current) clearTimeout(autoEndTimerRef.current);
-    };
-  }, []);
+    if (shouldAutoEnd && !conversation.isSpeaking && conversation.status === "connected" && !isEndingRef.current) {
+      const timer = setTimeout(() => {
+        if (!isEndingRef.current) {
+          endConversation();
+        }
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [shouldAutoEnd, conversation.isSpeaking, conversation.status, endConversation]);
 
   const startConversation = useCallback(async () => {
     setIsConnecting(true);
