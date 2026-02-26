@@ -37,15 +37,12 @@ export function VoiceAgent() {
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { conversationIdRef.current = conversationId; }, [conversationId]);
 
-  const saveConversation = useCallback(async () => {
+  const saveConversationRef = useRef<() => Promise<void>>();
+  saveConversationRef.current = async () => {
     const finalMessages = messagesRef.current.filter((m) => m.isFinal);
     const convId = conversationIdRef.current;
-    if (finalMessages.length === 0) {
-      console.log("[VoiceAgent] No final messages to save");
-      return;
-    }
+    if (finalMessages.length === 0) return;
 
-    console.log("[VoiceAgent] Saving conversation:", convId, "messages:", finalMessages.length);
     setIsSaving(true);
     const duration = startTimeRef.current
       ? Math.round((Date.now() - startTimeRef.current.getTime()) / 1000)
@@ -60,29 +57,25 @@ export function VoiceAgent() {
         })),
         duration_seconds: duration,
       });
-      console.log("[VoiceAgent] Save result:", result);
       setSavedCallId(result.call_id);
     } catch (err: any) {
-      console.error("[VoiceAgent] Save failed:", err);
       setError(`Failed to save conversation: ${err?.message || "unknown error"}`);
     } finally {
       setIsSaving(false);
     }
-  }, []);
+  };
 
   const conversation = useConversation({
-    onConnect: () => {
-      console.log("[VoiceAgent] Connected");
+    onConnect: useCallback(() => {
       setIsConnecting(false);
       setError(null);
       startTimeRef.current = new Date();
       setSavedCallId(null);
-    },
-    onDisconnect: () => {
-      console.log("[VoiceAgent] Disconnected, saving...");
-      saveConversation();
-    },
-    onMessage: (message: any) => {
+    }, []),
+    onDisconnect: useCallback(() => {
+      saveConversationRef.current?.();
+    }, []),
+    onMessage: useCallback((message: any) => {
       if (message.type === "transcript" && message.role) {
         const role = message.role === "user" ? "user" : "agent";
         setMessages((prev) => {
@@ -100,12 +93,11 @@ export function VoiceAgent() {
           return [...prev, { role, text: message.message, timestamp: new Date(), isFinal: true }];
         });
       }
-    },
-    onError: (err) => {
-      console.error("[VoiceAgent] Error:", err);
+    }, []),
+    onError: useCallback((err: any) => {
       setError(typeof err === "string" ? err : "Connection error");
       setIsConnecting(false);
-    },
+    }, []),
   });
 
   useEffect(() => {
@@ -145,8 +137,11 @@ export function VoiceAgent() {
   }, [conversation]);
 
   const endConversation = useCallback(async () => {
-    await conversation.endSession();
-    // Don't clear conversationId here — onDisconnect handles saving first
+    try {
+      await conversation.endSession();
+    } catch {
+      // WebSocket may already be closed
+    }
   }, [conversation]);
 
   const navigate = useNavigate();
