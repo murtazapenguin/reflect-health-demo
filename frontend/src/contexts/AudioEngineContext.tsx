@@ -138,15 +138,14 @@ export function AudioEngineProvider({ children }: { children: React.ReactNode })
   }, []);
 
   const playTTS = useCallback(async (text: string, voiceId: string, _volume = 0.4): Promise<void> => {
-    // Pre-process text so digit sequences are spoken as individual digits
+    // Pre-process text so digit sequences are spoken as individual digits,
+    // but leave dates and dollar amounts natural.
     const spokenText = text
-      // NPI, member IDs, claim numbers, PA IDs — spell out the digit runs
-      .replace(/\b(\d{4,})\b/g, (_m, digits: string) => digits.split("").join(" "))
       // Prefixed IDs like CLM-00481922, PA-00012345, BCX-1234567
       .replace(/([A-Z]{2,4})-(\d+)/g, (_m, prefix: string, digits: string) =>
         `${prefix.split("").join(" ")} ${digits.split("").join(" ")}`)
-      // Dates like 01/14/1986 — leave as-is (speech handles short numbers fine)
-      ;
+      // Spell out long digit runs (5+ digits) that aren't part of a date or dollar amount
+      .replace(/(?<![/$.])\b(\d{5,})\b(?![%/])/g, (_m, digits: string) => digits.split("").join(" "));
 
     const words = spokenText.split(/\s+/).length;
     const estimatedMs = Math.max(2200, (words / 2.5) * 1000);
