@@ -554,15 +554,13 @@ export function LiveCallSimulation() {
         // Handle data-timeout with animated progression
         if (line.phase === "data-timeout") {
           setFive9Phase("data-retrieving");
-          await new Promise((r) => setTimeout(r, 400));
+          await new Promise((r) => setTimeout(r, 800));
           setFive9Phase("data-timeout");
-          await new Promise((r) => setTimeout(r, 1200));
-          // Check if next line is response-ready (retry succeeded) or escalation
+          await new Promise((r) => setTimeout(r, 2000));
           const nextLine = template.script[lineIdx + 1];
           if (nextLine?.phase === "response-ready") {
             setFive9Phase("data-retry");
-            await new Promise((r) => setTimeout(r, 600));
-            // Update API calls to show retry success
+            await new Promise((r) => setTimeout(r, 1000));
             const retryCall: Five9ApiCall = { endpoint: apiCalls[0].endpoint, source: apiCalls[0].source, latency: randomLatency(200, 350), status: 200, isRetry: true };
             setFive9Session({ ...sessionData, apiCalls: [...apiCalls, retryCall], escalated: false, escalationReason: "" });
             setFive9Phase("data-retrieved");
@@ -571,18 +569,18 @@ export function LiveCallSimulation() {
 
         // Normal intent classification → data retrieval flow
         if (line.phase === "intent-classifying") {
-          await new Promise((r) => setTimeout(r, 400));
+          await new Promise((r) => setTimeout(r, 800));
           setFive9Phase("intent-classified");
-          await new Promise((r) => setTimeout(r, 300));
-          setFive9Phase("data-retrieving");
           await new Promise((r) => setTimeout(r, 600));
+          setFive9Phase("data-retrieving");
+          await new Promise((r) => setTimeout(r, 1200));
           setFive9Phase("data-retrieved");
-          await new Promise((r) => setTimeout(r, 200));
+          await new Promise((r) => setTimeout(r, 500));
           setFive9Phase("response-generating");
         }
 
         if (line.phase === "member-verified" && edgeCase === "none") {
-          await new Promise((r) => setTimeout(r, 400));
+          await new Promise((r) => setTimeout(r, 700));
         }
       }
 
@@ -594,7 +592,7 @@ export function LiveCallSimulation() {
       if (abortRef.current) break;
 
       setTranscript((prev) => prev.map((l) => (l.id === id ? { ...l, typing: false } : l)));
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((r) => setTimeout(r, 800));
     }
 
     if (abortRef.current) { isRunningRef.current = false; setFive9Phase("idle"); return; }
@@ -636,13 +634,13 @@ export function LiveCallSimulation() {
     if (callStatus === "resolved" || callStatus === "escalated") {
       const timer = setTimeout(() => {
         if (isLiveSimulation && audioEnabled) runCall();
-      }, 1500);
+      }, 4000);
       return () => clearTimeout(timer);
     }
     if (callStatus === "idle") {
       const timer = setTimeout(() => {
         if (isLiveSimulation && audioEnabled) runCall();
-      }, 1000);
+      }, 2000);
       return () => clearTimeout(timer);
     }
   }, [callStatus, isLiveSimulation, audioEnabled, runCall]);

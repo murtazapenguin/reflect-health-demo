@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useRef } from "react";
+import React, { createContext, useContext, useState, useCallback, useRef, useEffect } from "react";
 
 export interface CallOutcome {
   callDeflected: boolean;
@@ -117,37 +117,37 @@ export function AudioEngineProvider({ children }: { children: React.ReactNode })
   const [currentSpeaker, setCurrentSpeaker] = useState<"caller" | "ai" | null>(null);
   const [audioMode, setAudioMode] = useState<AudioMode | null>(null);
 
-  const currentAudio = useRef<HTMLAudioElement | null>(null);
   const playLock = useRef(false);
+  const activeUtterance = useRef<SpeechSynthesisUtterance | null>(null);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+
+  useEffect(() => {
+    const loadVoices = () => setVoices(window.speechSynthesis.getVoices());
+    loadVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", loadVoices);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", loadVoices);
+  }, []);
 
   const stopAudio = useCallback(() => {
-    if (currentAudio.current) {
-      currentAudio.current.pause();
-      currentAudio.current.onended = null;
-      currentAudio.current = null;
-    }
+    window.speechSynthesis.cancel();
+    activeUtterance.current = null;
     playLock.current = false;
     setIsPlaying(false);
     setCurrentSpeaker(null);
     setAudioMode(null);
   }, []);
 
-  const playTTS = useCallback(async (text: string, voiceId: string, volume = 0.4): Promise<void> => {
+  const playTTS = useCallback(async (text: string, voiceId: string, _volume = 0.4): Promise<void> => {
+    const words = text.split(/\s+/).length;
+    const estimatedMs = Math.max(2200, (words / 2.5) * 1000);
+
     if (isMuted) {
-      const words = text.split(/\s+/).length;
-      const estimatedMs = Math.max(1800, (words / 2.8) * 1000);
       await new Promise((r) => setTimeout(r, estimatedMs));
       return;
     }
 
-    // Stop any currently playing audio first
-    if (currentAudio.current) {
-      currentAudio.current.pause();
-      currentAudio.current.onended = null;
-      currentAudio.current = null;
-    }
+    window.speechSynthesis.cancel();
 
-    // Wait for any previous playback to fully release
     while (playLock.current) {
       await new Promise((r) => setTimeout(r, 50));
     }
@@ -158,50 +158,46 @@ export function AudioEngineProvider({ children }: { children: React.ReactNode })
     setIsPlaying(true);
 
     try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-          },
-          body: JSON.stringify({ text, voiceId }),
-        }
-      );
-      if (!response.ok) {
-        console.warn("TTS request failed:", response.status);
-        return;
+      const synth = window.speechSynthesis;
+      const utterance = new SpeechSynthesisUtterance(text);
+      activeUtterance.current = utterance;
+
+      const availableVoices = voices.length > 0 ? voices : synth.getVoices();
+      if (speaker === "ai") {
+        const preferred = availableVoices.find((v) => v.name.includes("Samantha"))
+          || availableVoices.find((v) => v.name.includes("Google UK English Female"))
+          || availableVoices.find((v) => v.lang.startsWith("en") && v.name.toLowerCase().includes("female"))
+          || availableVoices.find((v) => v.lang.startsWith("en"));
+        if (preferred) utterance.voice = preferred;
+        utterance.pitch = 1.05;
+        utterance.rate = 0.92 * playbackSpeed;
+      } else {
+        const preferred = availableVoices.find((v) => v.name.includes("Daniel"))
+          || availableVoices.find((v) => v.name.includes("Google UK English Male"))
+          || availableVoices.find((v) => v.lang.startsWith("en") && v.name.toLowerCase().includes("male"))
+          || availableVoices.find((v) => v.lang.startsWith("en"));
+        if (preferred) utterance.voice = preferred;
+        utterance.pitch = 0.9;
+        utterance.rate = 0.95 * playbackSpeed;
       }
-      const audioBlob = await response.blob();
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const audio = new Audio(audioUrl);
-      audio.volume = volume;
-      audio.playbackRate = playbackSpeed;
-      currentAudio.current = audio;
+      utterance.volume = Math.min(_volume * 1.5, 1);
 
       await new Promise<void>((resolve) => {
-        audio.onended = () => {
-          URL.revokeObjectURL(audioUrl);
-          currentAudio.current = null;
-          resolve();
-        };
-        audio.onerror = () => {
-          URL.revokeObjectURL(audioUrl);
-          currentAudio.current = null;
-          resolve();
-        };
-        audio.play().catch(() => resolve());
+        utterance.onend = () => resolve();
+        utterance.onerror = () => resolve();
+        synth.speak(utterance);
+        // Safety timeout in case speech synthesis hangs
+        setTimeout(resolve, estimatedMs * 2);
       });
-    } catch (err) {
-      console.warn("Audio playback error:", err);
+    } catch {
+      await new Promise((r) => setTimeout(r, estimatedMs));
     } finally {
+      activeUtterance.current = null;
       playLock.current = false;
       setIsPlaying(false);
       setCurrentSpeaker(null);
     }
-  }, [isMuted, playbackSpeed]);
+  }, [isMuted, playbackSpeed, voices]);
 
   return (
     <AudioEngineContext.Provider value={{
