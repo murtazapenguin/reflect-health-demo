@@ -72,14 +72,6 @@ export function VoiceAgent() {
     setMessages([]);
 
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
-      setError("Microphone access is required. Please allow microphone access and try again.");
-      setIsConnecting(false);
-      return;
-    }
-
-    try {
       const { signed_url } = await api.getElevenLabsSignedUrl();
       const id = await conversation.startSession({
         signedUrl: signed_url,
@@ -89,6 +81,8 @@ export function VoiceAgent() {
       const msg = err?.message || "Failed to start conversation";
       if (msg.includes("503") || msg.includes("not configured")) {
         setError("ElevenLabs is not configured yet. Set ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID on the backend.");
+      } else if (msg.includes("Microphone") || msg.includes("getUserMedia") || msg.includes("NotAllowedError")) {
+        setError("Microphone access is required. Please allow microphone access and try again.");
       } else {
         setError(msg);
       }
