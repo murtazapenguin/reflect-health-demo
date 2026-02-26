@@ -146,14 +146,14 @@ export function VoiceAgent() {
 
     try {
       // #region agent log
-      console.log("[DBG] Fetching signed URL from backend...");
+      console.log("[DBG] Fetching agent config from backend...");
       // #endregion
-      const { signed_url } = await api.getElevenLabsSignedUrl();
+      const { agent_id } = await api.getElevenLabsConfig();
       // #region agent log
-      console.log("[DBG] Got signed URL:", !!signed_url, "| Starting WebSocket session...");
+      console.log("[DBG] Got agent_id:", agent_id, "| Starting session with agentId directly...");
       // #endregion
       const id = await conversation.startSession({
-        signedUrl: signed_url,
+        agentId: agent_id,
       });
       // #region agent log
       console.log("[DBG] Session started OK. conversationId:", id);
