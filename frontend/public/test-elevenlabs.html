@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head><title>ElevenLabs Direct Test</title></head>
+<body>
+<h2>ElevenLabs Connection Test</h2>
+<button id="start">Start</button>
+<pre id="log" style="background:#111;color:#0f0;padding:16px;height:500px;overflow:auto;font-size:13px"></pre>
+<script type="module">
+import { Conversation } from 'https://esm.sh/@elevenlabs/client@0.15.0';
+
+const log = (msg) => {
+  const el = document.getElementById('log');
+  const ts = new Date().toISOString().split('T')[1].split('.')[0];
+  el.textContent += `[${ts}] ${msg}\n`;
+  el.scrollTop = el.scrollHeight;
+  console.log(msg);
+};
+
+document.getElementById('start').onclick = async () => {
+  log('Fetching signed URL from backend...');
+  try {
+    const resp = await fetch('https://reflect-health-demo-production.up.railway.app/api/v1/elevenlabs/token');
+    const { signed_url } = await resp.json();
+    log('Got signed URL: ' + signed_url.substring(0, 80) + '...');
+
+    log('Calling Conversation.startSession({ signedUrl })...');
+    const conv = await Conversation.startSession({
+      signedUrl: signed_url,
+      onConnect: ({ conversationId }) => log('EVENT onConnect — id: ' + conversationId),
+      onDisconnect: (details) => log('EVENT onDisconnect — reason: ' + JSON.stringify(details)),
+      onMessage: (msg) => log('EVENT onMessage — ' + msg.source + ': ' + (msg.message || '').substring(0, 80)),
+      onError: (err) => log('EVENT onError — ' + (typeof err === 'string' ? err : JSON.stringify(err))),
+      onStatusChange: ({ status }) => log('EVENT onStatusChange — ' + status),
+      onDebug: (evt) => log('EVENT onDebug — ' + (evt?.type || JSON.stringify(evt).substring(0, 100))),
+    });
+    log('Session started! Conv ID: ' + conv.getId());
+  } catch (err) {
+    log('CATCH ERROR: ' + err.message);
+    log('Stack: ' + err.stack);
+  }
+};
+</script>
+</body>
+</html>
