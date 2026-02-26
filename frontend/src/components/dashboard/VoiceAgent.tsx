@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { useConversation } from "@elevenlabs/react";
 import {
   Mic, MicOff, PhoneOff, Volume2, VolumeX, Loader2,
-  MessageSquare, Bot, User, AlertCircle, Phone,
+  MessageSquare, Bot, User, AlertCircle, Phone, ExternalLink, CheckCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { api } from "@/lib/api";
 import penguinLogo from "@/assets/penguin-ai-logo.png";
+import { DemoDataReference } from "./DemoDataReference";
 
 interface Message {
   role: "user" | "agent";
@@ -25,17 +27,53 @@ export function VoiceAgent() {
   const [volume, setVolume] = useState(0.8);
   const [micMuted, setMicMuted] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [savedCallId, setSavedCallId] = useState<string | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const toolCallsRef = useRef<Record<string, unknown>[]>([]);
+  const startTimeRef = useRef<Date | null>(null);
+  const messagesRef = useRef<Message[]>([]);
+  const conversationIdRef = useRef<string | null>(null);
+
+  useEffect(() => { messagesRef.current = messages; }, [messages]);
+  useEffect(() => { conversationIdRef.current = conversationId; }, [conversationId]);
+
+  const saveConversation = useCallback(async () => {
+    const finalMessages = messagesRef.current.filter((m) => m.isFinal);
+    if (finalMessages.length === 0) return;
+
+    const duration = startTimeRef.current
+      ? Math.round((Date.now() - startTimeRef.current.getTime()) / 1000)
+      : 0;
+
+    try {
+      const result = await api.saveElevenLabsConversation({
+        conversation_id: conversationIdRef.current,
+        transcript: finalMessages.map((m) => ({
+          speaker: m.role === "agent" ? "agent" : "user",
+          text: m.text,
+        })),
+        duration_seconds: duration,
+        tool_calls: toolCallsRef.current,
+      });
+      setSavedCallId(result.call_id);
+    } catch {
+      // Non-critical — don't block the UI
+    }
+  }, []);
 
   const conversation = useConversation({
     onConnect: () => {
       setIsConnecting(false);
       setError(null);
+      startTimeRef.current = new Date();
+      toolCallsRef.current = [];
+      setSavedCallId(null);
     },
     onDisconnect: () => {
+      saveConversation();
       setConversationId(null);
     },
-    onMessage: (message) => {
+    onMessage: (message: any) => {
       if (message.type === "transcript" && message.role) {
         const role = message.role === "user" ? "user" : "agent";
         setMessages((prev) => {
@@ -52,6 +90,9 @@ export function VoiceAgent() {
           }
           return [...prev, { role, text: message.message, timestamp: new Date(), isFinal: true }];
         });
+      }
+      if (message.type === "tool_call" || message.tool_name || message.tool_call) {
+        toolCallsRef.current.push(message);
       }
     },
     onError: (err) => {
@@ -101,6 +142,7 @@ export function VoiceAgent() {
     setConversationId(null);
   }, [conversation]);
 
+  const navigate = useNavigate();
   const isActive = conversation.status === "connected";
 
   return (
@@ -321,7 +363,29 @@ export function VoiceAgent() {
                     </dd>
                   </div>
                 )}
+                {savedCallId && (
+                  <div className="flex justify-between items-center">
+                    <dt className="type-micro text-muted-foreground">Call Log</dt>
+                    <dd>
+                      <Badge className="bg-emerald-100 text-emerald-700 text-[9px]">
+                        <CheckCircle className="h-2.5 w-2.5 mr-1" />
+                        Saved
+                      </Badge>
+                    </dd>
+                  </div>
+                )}
               </dl>
+              {savedCallId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full mt-3 text-xs"
+                  onClick={() => navigate(`/calls/${savedCallId}`)}
+                >
+                  <ExternalLink className="h-3 w-3 mr-1.5" />
+                  View in Call Log
+                </Button>
+              )}
             </CardContent>
           </Card>
 
@@ -376,6 +440,8 @@ export function VoiceAgent() {
           )}
         </div>
       </div>
+
+      <DemoDataReference />
     </div>
   );
 }

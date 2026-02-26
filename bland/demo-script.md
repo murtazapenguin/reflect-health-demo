@@ -9,65 +9,222 @@
 - [ ] Bland pathway tested with at least 1 test call
 - [ ] Demo phone ready (separate from presentation device)
 - [ ] Dashboard open in browser, logged in
+- [ ] ElevenLabs agent configured (see `elevenlabs-setup.md`)
 
-## Demo Data for Live Calls
+---
 
-**Provider credentials (for authentication) — REAL NPI:**
-- NPI: `1003045220` (verified via CMS national provider file)
-- Name: Dr. Jasleen Sohal
-- Practice: Walnut Creek Family Practice
-- Zip code: `94597`
-- Specialty: Family Practice
-- Location: Walnut Creek, CA
+## Provider Directory (Authentication)
 
-> **Note:** This is a real NPI from CMS. Any real NPI will work — the backend
-> queries CMS and caches the provider. However, the CMS API is slow (~15-25s),
-> so these four NPIs are pre-loaded for instant auth:
->
-> | NPI | Name | Zip | Specialty |
-> |-----|------|-----|-----------|
-> | `1003045220` | Dr. Jasleen Sohal | `94597` | Family Practice |
-> | `1003045683` | Dr. Kali Tileston | `95128` | Orthopedic Surgery |
-> | `1003044728` | Dr. Kyle Edmonds | `92103` | Palliative Care |
-> | `1003000126` | Dr. Ardalan Enkeshafi | `20032` | Hospitalist |
+All four CMS-verified providers below are pre-loaded for instant authentication.
+**Each provider accepts two zip codes** (primary + satellite).
 
-**Patient for eligibility check:**
-- Name: John Smith
-- DOB: March 4, 1982
-- Status: Active, Reflect Gold PPO
-- Expected response: $20 copay, $1,500 deductible ($420 met)
+| # | NPI | Name | Zip (Primary) | Zip (Alt) | Specialty | City |
+|---|-----|------|---------------|-----------|-----------|------|
+| 1 | `1003045220` | Dr. Jasleen Sohal | `94597` | `94598` | Family Practice | Walnut Creek, CA |
+| 2 | `1003045683` | Dr. Kali Tileston | `95128` | `95148` | Orthopedic Surgery | San Jose, CA |
+| 3 | `1003044728` | Dr. Kyle Edmonds | `92103` | `92104` | Palliative Care | San Diego, CA |
+| 4 | `1003000126` | Dr. Ardalan Enkeshafi | `20032` | `20024` | Hospitalist | Washington, DC |
 
-**Claim for paid claim check:**
-- Claim number: CLM-00481922
-- Patient: John Smith
-- Provider: Dr. Jasleen Sohal (NPI 1003045220)
-- Status: Paid, $570 of $850 billed
-- Check: CHK-0018472
+> **Tip:** Any real NPI will work (the backend queries CMS), but these four are pre-loaded for < 1s response time.
 
-**Claim for denied claim check:**
-- Claim number: CLM-00519833
-- Patient: John Smith
-- Provider: Dr. Jasleen Sohal (NPI 1003045220)
-- Status: Denied, CO-97 (not covered by plan)
+---
+
+## Patient Directory
+
+| Member ID | Name | DOB | Plan | Status | Key Details |
+|-----------|------|-----|------|--------|-------------|
+| MBR-001234 | John Smith | 1982-03-04 | Reflect Gold PPO | Active | $20 PCP copay, $1,500 deductible ($420 met) |
+| MBR-001235 | Mary Johnson | 1975-08-15 | Reflect Silver HMO | Active | $30 PCP copay, $2,500 deductible ($800 met) |
+| MBR-001236 | Robert Williams | 1990-11-22 | Reflect Gold PPO | Active | Secondary COB, deductible fully met |
+| MBR-001237 | Patricia Brown | 1968-05-30 | Reflect Platinum PPO | Active | $10 PCP copay, deductible fully met, near OOP max |
+| MBR-001238 | Michael Jones | 1955-01-12 | Reflect Gold PPO | Active | Low deductible met ($200) |
+| MBR-001239 | Linda Garcia | 1980-09-08 | Reflect Silver HMO | **Termed** | Term date: 2025-12-31 |
+| MBR-001240 | David Miller | 1972-04-18 | Reflect Gold PPO | **Inactive** | Term date: 2025-06-30 |
+
+---
+
+## Test Scenarios
+
+### SCENARIO 1 — Eligibility: Happy Path (Active Member)
+**Provider:** Dr. Jasleen Sohal — NPI `1003045220`, Zip `94597`
+**Patient:** John Smith — DOB: March 4, 1982
+**Expected Result:**
+- Status: **Active** on Reflect Gold PPO
+- Copay: $20 PCP / $50 specialist
+- Deductible: $1,500 ($420 met)
+- OOP Max: $6,000 ($1,200 met)
+
+### SCENARIO 2 — Eligibility: Service-Specific (MRI)
+**Provider:** Dr. Jasleen Sohal — NPI `1003045220`, Zip `94597`
+**Patient:** John Smith — DOB: March 4, 1982
+**Service:** "MRI"
+**Expected Result:**
+- MRI: **Covered**, $150 copay, **no prior auth required** (Gold PPO)
+
+### SCENARIO 3 — Eligibility: Service Requiring Prior Auth (HMO)
+**Provider:** Dr. Kali Tileston — NPI `1003045683`, Zip `95128` or `95148`
+**Patient:** Mary Johnson — DOB: August 15, 1975
+**Service:** "physical therapy"
+**Expected Result:**
+- Physical Therapy: **Covered**, $50 copay, **prior auth required**, 20 visits/year (Silver HMO)
+
+### SCENARIO 4 — Eligibility: Termed Member (Edge Case)
+**Provider:** Dr. Kyle Edmonds — NPI `1003044728`, Zip `92103`
+**Patient:** Linda Garcia — DOB: September 8, 1980
+**Expected Result:**
+- Status: **Termed** — term date Dec 31, 2025
+- Agent should inform provider the member's coverage has ended
+
+### SCENARIO 5 — Eligibility: Inactive Member (Edge Case)
+**Provider:** Dr. Jasleen Sohal — NPI `1003045220`, Zip `94597`
+**Patient:** David Miller — DOB: April 18, 1972
+**Expected Result:**
+- Status: **Inactive** — term date June 30, 2025
+
+### SCENARIO 6 — Eligibility: Service Not Covered (Edge Case)
+**Provider:** Dr. Kali Tileston — NPI `1003045683`, Zip `95148`
+**Patient:** Mary Johnson — DOB: August 15, 1975
+**Service:** "chiropractic"
+**Expected Result:**
+- Chiropractic: **Not covered** under Silver HMO plan
+
+### SCENARIO 7 — Eligibility: Member Near OOP Max
+**Provider:** Dr. Ardalan Enkeshafi — NPI `1003000126`, Zip `20032`
+**Patient:** Patricia Brown — DOB: May 30, 1968
+**Expected Result:**
+- Status: **Active** on Reflect Platinum PPO
+- OOP Max: $4,000 ($2,800 met — only $1,200 remaining)
+- Deductible: fully met
+
+---
+
+### SCENARIO 8 — Claims: Paid Claim
+**Provider:** Dr. Jasleen Sohal — NPI `1003045220`, Zip `94597`
+**Patient:** John Smith
+**Claim #:** `CLM-00481922`
+**Expected Result:**
+- Status: **Paid**
+- Billed: $850 → Allowed: $620 → Paid: $570
+- Check: CHK-0018472, processed Dec 1, 2025
+
+### SCENARIO 9 — Claims: Denied Claim
+**Provider:** Dr. Jasleen Sohal — NPI `1003045220`, Zip `94597`
+**Patient:** John Smith
+**Claim #:** `CLM-00519833`
+**Expected Result:**
+- Status: **Denied**, code CO-97
+- Reason: "Payment adjusted — service not covered by this plan benefit"
 - Appeal deadline: July 24, 2026
 
-**Prior auth for approved PA check:**
-- PA ID: PA-00012345
+### SCENARIO 10 — Claims: Pending Claim
+**Provider:** Dr. Kali Tileston — NPI `1003045683`, Zip `95128`
+**Patient:** Robert Williams
+**Claim #:** `CLM-00520200`
+**Expected Result:**
+- Status: **Pending** — joint injection, received Jan 23, 2026
+- No payment info yet
+
+### SCENARIO 11 — Claims: Paid Surgical Claim
+**Provider:** Dr. Kali Tileston — NPI `1003045683`, Zip `95148`
+**Patient:** Mary Johnson
+**Claim #:** `CLM-00520100`
+**Expected Result:**
+- Status: **Paid** — total knee replacement
+- Billed: $42,000 → Paid: $30,500
+- Check: CHK-0019200
+
+### SCENARIO 12 — Claims: Denied Claim (Different Provider)
+**Provider:** Dr. Kyle Edmonds — NPI `1003044728`, Zip `92103`
+**Patient:** Michael Jones
+**Claim #:** `CLM-00520400`
+**Expected Result:**
+- Status: **Denied**, code CO-11
+- Reason: "Diagnosis inconsistent with procedure"
+- Appeal deadline: Aug 17, 2026
+
+### SCENARIO 13 — Claims: Claim Not Found (Edge Case)
+**Provider:** Dr. Jasleen Sohal — NPI `1003045220`, Zip `94597`
+**Claim #:** `CLM-99999999`
+**Expected Result:**
+- "No claim found" — agent should offer to search by patient name/DOS
+
+---
+
+### SCENARIO 14 — Prior Auth: Approved
+**Provider:** Dr. Jasleen Sohal — NPI `1003045220`, Zip `94597`
+**PA ID:** `PA-00012345`
+**Expected Result:**
+- Status: **Approved**
 - Patient: John Smith (MBR-001234)
 - Service: MRI Lumbar Spine (CPT 72148)
-- Status: Approved, 1 procedure, expires July 18, 2026
+- Approved for 1 procedure, expires July 18, 2026
 
-**Prior auth for denied PA check:**
-- PA ID: PA-00012400
-- Patient: John Smith (MBR-001234)
+### SCENARIO 15 — Prior Auth: Denied
+**Provider:** Dr. Kali Tileston — NPI `1003045683`, Zip `95128`
+**PA ID:** `PA-00012400`
+**Expected Result:**
+- Status: **Denied**
+- Patient: John Smith
 - Service: Knee Arthroscopy
-- Status: Denied — medical necessity not met
+- Reason: "Medical necessity not met — conservative treatment not exhausted"
+- Notes: Recommend 6 weeks PT before resubmission
 
-**Prior auth pending:**
-- PA ID: PA-00012500
-- Patient: John Smith (MBR-001234)
+### SCENARIO 16 — Prior Auth: Pending Review
+**Provider:** Dr. Jasleen Sohal — NPI `1003045220`, Zip `94597`
+**PA ID:** `PA-00012500`
+**Expected Result:**
+- Status: **Pending Review**
 - Service: Physical Therapy (12 visits)
-- Status: Pending Review
+
+### SCENARIO 17 — Prior Auth: Lookup by Member ID
+**Provider:** Dr. Kali Tileston — NPI `1003045683`, Zip `95148`
+**Member ID:** `MBR-001235`
+**Expected Result:**
+- Returns most recent PA for Mary Johnson
+- PA-00012510: Total Knee Replacement — **Approved**
+
+### SCENARIO 18 — Prior Auth: Denied (Different Provider)
+**Provider:** Dr. Ardalan Enkeshafi — NPI `1003000126`, Zip `20032`
+**PA ID:** `PA-00012540`
+**Expected Result:**
+- Status: **Denied**
+- Service: Inpatient Admission — Pneumonia
+- Reason: "Does not meet inpatient criteria — recommend observation status"
+
+### SCENARIO 19 — Prior Auth: Expired (Edge Case)
+**Provider:** Any authenticated provider
+**PA ID:** `PA-00012900`
+**Expected Result:**
+- Status: **Expired**
+- Service: Cardiac Stress Test
+- Note: "Authorization expired — procedure was not completed within window"
+
+---
+
+### SCENARIO 20 — Auth Failure: Wrong Zip Code (Edge Case)
+**Provider:** NPI `1003045220`, Zip `90210` (wrong zip for Dr. Sohal)
+**Expected Result:**
+- Zip verification **fails**
+- Agent should ask to re-enter or offer transfer
+
+### SCENARIO 21 — Auth Failure: Invalid NPI (Edge Case)
+**Provider:** NPI `0000000000`
+**Expected Result:**
+- NPI not found in local DB or CMS
+- Agent should ask to re-enter
+
+### SCENARIO 22 — Transfer: Out-of-Scope Request
+**Action:** Say "I need to submit a new prior authorization"
+**Expected Result:**
+- Agent recognizes this is a submission (not a status check)
+- Offers to transfer to a human representative
+
+### SCENARIO 23 — Patient Not Found (Edge Case)
+**Provider:** Dr. Jasleen Sohal — NPI `1003045220`, Zip `94597`
+**Patient:** "Jane Doe, DOB January 1, 2000"
+**Expected Result:**
+- No member found
+- Agent should ask to verify spelling/information
 
 ---
 
@@ -84,7 +241,7 @@
 
 ### 2. Live Eligibility Call (4 min)
 
-**Say:** "Now let me show you what happens when a provider actually calls in. I'm going to call the AI right now."
+**Say:** "Now let me show you what happens when a provider actually calls in."
 
 **On the phone (speaker):**
 1. Call the Bland inbound number
@@ -94,14 +251,13 @@
 5. AI asks for zip → Say: "94597"
 6. AI confirms: "Dr. Sohal" → confirms
 7. AI asks for patient info → Say: "John Smith, born March 4th, 1982"
-8. AI asks for service type → Say: "primary care" (or "MRI", "physical therapy", etc.)
-9. AI confirms the data and delivers eligibility info with service-specific coverage
+8. AI asks for service type → Say: "primary care" (or "MRI", "physical therapy")
+9. AI delivers eligibility info with service-specific coverage
 
 **After the call, switch to dashboard:**
-- Refresh the call log
-- Show the new call appearing
-- Click into it: show transcript, extracted data, tags
-- "Every call is logged automatically with a full transcript, all the data that was looked up, and tags for categorization"
+- Refresh the call log — show the new call appearing
+- Click into it: transcript, extracted data, tags
+- "Every call is logged automatically with full transcript, all data looked up, and tags"
 
 ### 3. Live Claims Call (3 min)
 
@@ -110,51 +266,39 @@
 2. Say: "I need to check on a claim"
 3. Authenticate with NPI "1003045220" + zip "94597"
 4. Say: "John Smith, March 4th 1982"
-5. Provide claim number: "CLM-00481922"
+5. Claim number: "CLM-00481922"
 6. AI delivers payment details
 
-**Key point:** "Notice the AI correctly pulled the exact payment amount, check number, and processing date — all from your data."
-
 ### 4. Live Prior Auth Call (3 min)
-
-**Say:** "Now let's check on a prior authorization — another high-volume call type."
 
 **On the phone:**
 1. Call the Bland inbound number again
 2. Say: "I need to check on a prior authorization"
 3. Authenticate with NPI "1003045220" + zip "94597"
-4. AI asks for PA ID or member ID → Say: "PA-00012345"
-5. AI delivers PA status: Approved, MRI Lumbar Spine, expires July 18 2026
+4. PA ID: "PA-00012345"
+5. AI delivers: Approved, MRI Lumbar Spine, expires July 18 2026
 
-**Key point:** "Prior auth status checks are one of the highest-volume call types — the AI handles it end to end without any human involvement."
+### 5. In-Browser Agent Demo (3 min)
 
-**Alternate scenario (denied PA):**
-- Use PA ID: "PA-00012400" → AI reads back denial reason and offers transfer to appeals
+**Say:** "We can also embed this directly in your platform. Let me show you the same experience — right in the browser."
 
-### 5. Transfer Demo (2 min)
+1. Click **Live Agent** tab
+2. Click **Start Conversation**
+3. Run the same eligibility scenario (Scenario 1) via voice in the browser
+4. Show transcript updating in real time
+5. End the call — show it appears in the Call Log alongside the phone calls
 
-**On the phone:**
-1. Call the inbound number one more time
-2. Say: "I need to submit a new prior authorization"
-3. AI recognizes this is outside its scope (submitting vs. checking) and offers to transfer
-4. Call transfers to a human (or rings out in demo)
+### 6. Transfer Demo (2 min)
 
-**Key point:** "The AI knows the difference between *checking* a prior auth and *submitting* one. It handles status checks automatically but transfers for new submissions."
+Call the inbound number and say: "I need to submit a new prior authorization"
+→ AI recognizes it's out of scope and offers transfer
 
-### 6. Dashboard Deep Dive (3 min)
+### 7. Dashboard Deep Dive (3 min)
 
-- Show the call log with all four calls now visible
-- Filter by intent: show only eligibility calls, then prior auth
-- Filter by outcome: show only transferred calls
-- "Your ops team can use this to identify training opportunities, audit AI accuracy, and track performance in real time"
-- Show the flag feature: "If a supervisor spots something concerning, they can flag it for review"
-- Show tags: "Calls are automatically tagged, and your team can add custom tags"
-
-### 7. ROI Summary (2 min)
-
-- "Based on the $600K addressable call center cost and the 65%+ deflection rate we're seeing..."
-- "At $5K/month, that's $380K in projected annual savings — a 63% ROI"
-- "And this is Phase 1. Phase 2 opens the door to AI-assisted claims adjudication"
+- Show the call log with all calls visible
+- Filter by intent and outcome
+- Show flag feature and tag management
+- "Your ops team can audit AI accuracy and track performance in real time"
 
 ---
 
@@ -162,14 +306,15 @@
 
 If Bland AI has issues during the live demo:
 1. Show the pre-recorded test calls in the dashboard
-2. Walk through the transcripts to demonstrate the conversation flow
-3. Explain: "We've pre-tested this extensively — here are recordings from our test runs"
+2. Walk through transcripts to demonstrate conversation flow
+3. Use the **Live Agent** (ElevenLabs) tab as an alternative live demo
 4. Play any available call recordings from the dashboard
 
-## Key Differentiators to Emphasize
+## Key Differentiators
 
-1. **Natural conversation, not IVR**: "Notice there's no 'press 1 for eligibility' — the provider just talks naturally"
-2. **Real data integration**: "This isn't a scripted demo — it's pulling from your actual data structure"
-3. **Instant visibility**: "Every call is logged in real time — no waiting for reports"
-4. **Smart escalation**: "The AI knows its limits and transfers gracefully"
-5. **Speed**: "Average call under 90 seconds vs. 4-5 minutes with a human agent"
+1. **Natural conversation, not IVR**: No "press 1 for eligibility" — providers just talk naturally
+2. **Real data integration**: Pulls from your actual data structure — not a scripted demo
+3. **Instant visibility**: Every call logged in real time — no waiting for reports
+4. **Smart escalation**: AI knows its limits and transfers gracefully
+5. **Multi-channel**: Same AI available over phone (Bland) and in-browser (ElevenLabs)
+6. **Speed**: Average call under 90 seconds vs. 4-5 minutes with a human agent

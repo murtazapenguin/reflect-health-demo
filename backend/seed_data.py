@@ -40,7 +40,7 @@ PROVIDERS = [
         "name": "Dr. Jasleen Sohal",
         "practice_name": "Walnut Creek Family Practice",
         "zip_code": "94597",
-        "zip_codes": ["94597"],
+        "zip_codes": ["94597", "94598"],
         "specialty": "Family Practice",
         "city": "Walnut Creek",
         "state": "CA",
@@ -51,7 +51,7 @@ PROVIDERS = [
         "name": "Dr. Kali Tileston",
         "practice_name": "San Jose Orthopedic Center",
         "zip_code": "95128",
-        "zip_codes": ["95128"],
+        "zip_codes": ["95128", "95148"],
         "specialty": "Orthopedic Surgery",
         "city": "San Jose",
         "state": "CA",
@@ -62,7 +62,7 @@ PROVIDERS = [
         "name": "Dr. Kyle Edmonds",
         "practice_name": "San Diego Palliative Care",
         "zip_code": "92103",
-        "zip_codes": ["92103"],
+        "zip_codes": ["92103", "92104"],
         "specialty": "Hospice/Palliative Care",
         "city": "San Diego",
         "state": "CA",
@@ -73,7 +73,7 @@ PROVIDERS = [
         "name": "Dr. Ardalan Enkeshafi",
         "practice_name": "Washington Hospitalist Group",
         "zip_code": "20032",
-        "zip_codes": ["20032"],
+        "zip_codes": ["20032", "20024"],
         "specialty": "Hospitalist",
         "city": "Washington",
         "state": "DC",
@@ -277,6 +277,14 @@ CLAIMS = [
     # Demo script claims — linked to real NPI (Dr. Jasleen Sohal)
     {"claim_number": "CLM-00481922", "member_id": "MBR-001234", "provider_npi": "1003045220", "date_of_service": "2025-11-15", "procedure_code": "99213", "procedure_desc": "Office visit, established patient", "status": "paid", "billed_amount": 850.00, "allowed_amount": 620.00, "paid_amount": 570.00, "patient_responsibility": 50.00, "check_number": "CHK-0018472", "process_date": "2025-12-01", "received_date": "2025-11-16", "denial_code": None, "denial_reason": None, "appeal_deadline": None},
     {"claim_number": "CLM-00519833", "member_id": "MBR-001234", "provider_npi": "1003045220", "date_of_service": "2026-01-10", "procedure_code": "99215", "procedure_desc": "Office visit, high complexity", "status": "denied", "billed_amount": 1200.00, "allowed_amount": 0.00, "paid_amount": 0.00, "patient_responsibility": 0.00, "check_number": None, "process_date": "2026-01-25", "received_date": "2026-01-11", "denial_code": "CO-97", "denial_reason": "Payment adjusted — service not covered by this plan benefit", "appeal_deadline": "2026-07-24"},
+    # --- Dr. Tileston (1003045683) claims for Mary Johnson ---
+    {"claim_number": "CLM-00520100", "member_id": "MBR-001235", "provider_npi": "1003045683", "date_of_service": "2025-12-10", "procedure_code": "27447", "procedure_desc": "Total knee replacement", "status": "paid", "billed_amount": 42000.00, "allowed_amount": 31000.00, "paid_amount": 30500.00, "patient_responsibility": 500.00, "check_number": "CHK-0019200", "process_date": "2026-01-05", "received_date": "2025-12-11", "denial_code": None, "denial_reason": None, "appeal_deadline": None},
+    {"claim_number": "CLM-00520200", "member_id": "MBR-001236", "provider_npi": "1003045683", "date_of_service": "2026-01-22", "procedure_code": "20610", "procedure_desc": "Joint injection, major joint", "status": "pending", "billed_amount": 950.00, "allowed_amount": 0.00, "paid_amount": 0.00, "patient_responsibility": 0.00, "check_number": None, "process_date": None, "received_date": "2026-01-23", "denial_code": None, "denial_reason": None, "appeal_deadline": None},
+    # --- Dr. Edmonds (1003044728) claims for Patricia Brown ---
+    {"claim_number": "CLM-00520300", "member_id": "MBR-001237", "provider_npi": "1003044728", "date_of_service": "2025-11-20", "procedure_code": "99223", "procedure_desc": "Inpatient hospital care, high complexity", "status": "paid", "billed_amount": 8500.00, "allowed_amount": 7200.00, "paid_amount": 7100.00, "patient_responsibility": 100.00, "check_number": "CHK-0019250", "process_date": "2025-12-15", "received_date": "2025-11-21", "denial_code": None, "denial_reason": None, "appeal_deadline": None},
+    {"claim_number": "CLM-00520400", "member_id": "MBR-001238", "provider_npi": "1003044728", "date_of_service": "2026-02-05", "procedure_code": "99215", "procedure_desc": "Office visit, high complexity", "status": "denied", "billed_amount": 1100.00, "allowed_amount": 0.00, "paid_amount": 0.00, "patient_responsibility": 0.00, "check_number": None, "process_date": "2026-02-18", "received_date": "2026-02-06", "denial_code": "CO-11", "denial_reason": "Diagnosis inconsistent with procedure — clinical documentation required", "appeal_deadline": "2026-08-17"},
+    # --- Dr. Enkeshafi (1003000126) claims ---
+    {"claim_number": "CLM-00520500", "member_id": "MBR-001242", "provider_npi": "1003000126", "date_of_service": "2025-10-18", "procedure_code": "99222", "procedure_desc": "Inpatient hospital care, moderate complexity", "status": "paid", "billed_amount": 5800.00, "allowed_amount": 4900.00, "paid_amount": 4850.00, "patient_responsibility": 50.00, "check_number": "CHK-0019300", "process_date": "2025-11-08", "received_date": "2025-10-19", "denial_code": None, "denial_reason": None, "appeal_deadline": None},
     # Additional claims
     {"claim_number": "CLM-00482100", "member_id": "MBR-001235", "provider_npi": "2345678901", "date_of_service": "2025-10-20", "procedure_code": "99214", "procedure_desc": "Office visit, moderate complexity", "status": "paid", "billed_amount": 450.00, "allowed_amount": 380.00, "paid_amount": 315.00, "patient_responsibility": 65.00, "check_number": "CHK-0018501", "process_date": "2025-11-05", "received_date": "2025-10-21", "denial_code": None, "denial_reason": None, "appeal_deadline": None},
     {"claim_number": "CLM-00482200", "member_id": "MBR-001236", "provider_npi": "3456789012", "date_of_service": "2025-11-01", "procedure_code": "93000", "procedure_desc": "Electrocardiogram, 12-lead", "status": "paid", "billed_amount": 320.00, "allowed_amount": 280.00, "paid_amount": 230.00, "patient_responsibility": 50.00, "check_number": "CHK-0018520", "process_date": "2025-11-18", "received_date": "2025-11-02", "denial_code": None, "denial_reason": None, "appeal_deadline": None},
@@ -324,6 +332,13 @@ PRIOR_AUTHS = [
     {"pa_id": "PA-00012345", "member_id": "MBR-001234", "provider_npi": "1003045220", "service_description": "MRI Lumbar Spine", "procedure_code": "72148", "status": "approved", "urgency": "routine", "submitted_date": "2026-01-15", "decision_date": "2026-01-18", "expiration_date": "2026-07-18", "approved_units": "1 procedure", "denial_reason": None, "notes": "Approved for single MRI lumbar spine without contrast"},
     {"pa_id": "PA-00012400", "member_id": "MBR-001234", "provider_npi": "1003045683", "service_description": "Knee Arthroscopy", "procedure_code": "29881", "status": "denied", "urgency": "routine", "submitted_date": "2026-01-20", "decision_date": "2026-01-28", "expiration_date": None, "approved_units": None, "denial_reason": "Medical necessity criteria not met — conservative treatment not yet exhausted", "notes": "Recommend 6 weeks physical therapy before resubmission"},
     {"pa_id": "PA-00012500", "member_id": "MBR-001234", "provider_npi": "1003045220", "service_description": "Physical Therapy", "procedure_code": "97110", "status": "pending_review", "urgency": "routine", "submitted_date": "2026-02-10", "decision_date": None, "expiration_date": None, "approved_units": None, "denial_reason": None, "notes": "Requesting 12 visits for lower back rehabilitation"},
+    # --- Dr. Tileston PA records ---
+    {"pa_id": "PA-00012510", "member_id": "MBR-001235", "provider_npi": "1003045683", "service_description": "Total Knee Replacement", "procedure_code": "27447", "status": "approved", "urgency": "routine", "submitted_date": "2025-11-15", "decision_date": "2025-11-22", "expiration_date": "2026-05-22", "approved_units": "1 procedure", "denial_reason": None, "notes": "Pre-authorized for left total knee arthroplasty"},
+    {"pa_id": "PA-00012520", "member_id": "MBR-001236", "provider_npi": "1003045683", "service_description": "Shoulder MRI with Contrast", "procedure_code": "73222", "status": "pending_review", "urgency": "routine", "submitted_date": "2026-02-18", "decision_date": None, "expiration_date": None, "approved_units": None, "denial_reason": None, "notes": "Awaiting peer review — rotator cuff tear suspected"},
+    # --- Dr. Edmonds PA records ---
+    {"pa_id": "PA-00012530", "member_id": "MBR-001237", "provider_npi": "1003044728", "service_description": "Home Hospice Care", "procedure_code": "99377", "status": "approved", "urgency": "urgent", "submitted_date": "2025-12-18", "decision_date": "2025-12-18", "expiration_date": "2026-06-18", "approved_units": "90 days", "denial_reason": None, "notes": "Approved for home-based hospice — terminal diagnosis confirmed"},
+    # --- Dr. Enkeshafi PA records ---
+    {"pa_id": "PA-00012540", "member_id": "MBR-001242", "provider_npi": "1003000126", "service_description": "Inpatient Admission — Pneumonia", "procedure_code": "99223", "status": "denied", "urgency": "urgent", "submitted_date": "2026-01-25", "decision_date": "2026-01-30", "expiration_date": None, "approved_units": None, "denial_reason": "Does not meet inpatient criteria — recommend observation status", "notes": "Clinical reviewer suggests outpatient observation for 24h"},
     # Other members
     {"pa_id": "PA-00012600", "member_id": "MBR-001235", "provider_npi": "2345678901", "service_description": "CT Scan Abdomen", "procedure_code": "74177", "status": "approved", "urgency": "urgent", "submitted_date": "2026-02-01", "decision_date": "2026-02-01", "expiration_date": "2026-08-01", "approved_units": "1 procedure", "denial_reason": None, "notes": "Expedited review — urgent clinical indication"},
     {"pa_id": "PA-00012700", "member_id": "MBR-001237", "provider_npi": "1003044728", "service_description": "Inpatient Admission", "procedure_code": "99223", "status": "approved", "urgency": "urgent", "submitted_date": "2025-12-20", "decision_date": "2025-12-20", "expiration_date": "2026-03-20", "approved_units": "5 days", "denial_reason": None, "notes": "Pre-authorized for elective hip replacement surgery"},
