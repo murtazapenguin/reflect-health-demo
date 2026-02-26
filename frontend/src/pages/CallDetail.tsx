@@ -13,8 +13,10 @@ import reflectLogo from "@/assets/reflect-health-logo.png";
 
 const LABEL_MAP: Record<string, string> = {
   call_intent: "Intent", npi: "NPI", zip_code: "Zip Code", provider_name: "Provider",
-  patient_name: "Patient", patient_dob: "DOB", claim_number: "Claim #", valid: "NPI Valid",
-  verified: "Zip Verified", found: "Lookup Result", message: "Details",
+  practice_name: "Practice", patient_name: "Patient", patient_dob: "DOB",
+  claim_number: "Claim #", claim_status: "Claim Status", valid: "NPI Valid",
+  verified: "Zip Verified", zip_verified: "Zip Verified", found: "Lookup Result",
+  message: "Details",
   service_type: "Service", service_covered: "Covered", service_copay: "Service Copay",
   service_coinsurance: "Coinsurance", service_prior_auth: "Prior Auth Required",
   service_visit_limit: "Visit Limit", service_notes: "Service Notes",
@@ -26,21 +28,25 @@ const LABEL_MAP: Record<string, string> = {
   procedure_code: "CPT Code", urgency: "Urgency", submitted_date: "Submitted",
   decision_date: "Decision Date", expiration_date: "Expires", approved_units: "Approved Units",
   denial_reason: "Denial Reason", notes: "Notes",
+  billed_amount: "Billed", allowed_amount: "Allowed", paid_amount: "Paid",
+  patient_responsibility: "Patient Resp.", check_number: "Check #",
+  appeal_deadline: "Appeal Deadline", call_successful: "Call Successful",
 };
 
-const BOOL_KEYS = new Set(["found", "valid", "verified", "service_covered", "service_prior_auth"]);
-const DOLLAR_KEYS = new Set(["service_copay", "copay_primary", "copay_specialist", "deductible", "deductible_met", "out_of_pocket_max", "out_of_pocket_met"]);
+const BOOL_KEYS = new Set(["found", "valid", "verified", "zip_verified", "service_covered", "service_prior_auth", "call_successful"]);
+const DOLLAR_KEYS = new Set(["service_copay", "copay_primary", "copay_specialist", "deductible", "deductible_met", "out_of_pocket_max", "out_of_pocket_met", "billed_amount", "allowed_amount", "paid_amount", "patient_responsibility"]);
 const PA_STATUS_MAP: Record<string, string> = { approved: "Approved", denied: "Denied", pending_review: "Pending Review", in_review: "In Review", expired: "Expired" };
 
 function formatValue(key: string, val: unknown): string {
   const s = String(val);
   if (key === "found") return s === "true" ? "Found" : "Not Found";
-  if (key === "valid" || key === "verified") return s === "true" ? "Yes" : "No";
+  if (key === "valid" || key === "verified" || key === "zip_verified") return s === "true" ? "Yes" : "No";
+  if (key === "call_successful") return s === "true" ? "Yes" : "No";
   if (key === "service_covered") return s === "true" ? "Yes" : s === "false" ? "No" : "Unknown";
   if (key === "service_prior_auth") return s === "true" ? "Yes" : "No";
   if (key === "service_coinsurance" && val != null) return `${val}%`;
-  if (DOLLAR_KEYS.has(key) && val != null) return `$${val}`;
-  if (key === "pa_status") return PA_STATUS_MAP[s] || s;
+  if (DOLLAR_KEYS.has(key) && val != null) return `$${Number(val).toLocaleString()}`;
+  if (key === "pa_status" || key === "claim_status") return PA_STATUS_MAP[s] || s.charAt(0).toUpperCase() + s.slice(1);
   if (key === "urgency") return s === "urgent" ? "Urgent" : "Routine";
   return s;
 }
@@ -49,9 +55,10 @@ function valueColor(key: string, val: unknown): string {
   const s = String(val);
   if (key === "found") return s === "true" ? "text-emerald-600" : "text-amber-600";
   if (key === "service_covered") return s === "true" ? "text-emerald-600" : s === "false" ? "text-red-600" : "text-amber-600";
-  if (key === "valid" || key === "verified") return s === "true" ? "text-emerald-600" : "text-red-600";
+  if (key === "valid" || key === "verified" || key === "zip_verified") return s === "true" ? "text-emerald-600" : "text-red-600";
+  if (key === "call_successful") return s === "true" ? "text-emerald-600" : "text-red-600";
   if (key === "service_prior_auth") return s === "true" ? "text-amber-600" : "text-emerald-600";
-  if (key === "pa_status") return s === "approved" ? "text-emerald-600" : s === "denied" ? "text-red-600" : s === "expired" ? "text-muted-foreground" : "text-amber-600";
+  if (key === "pa_status" || key === "claim_status") return s === "approved" || s === "paid" ? "text-emerald-600" : s === "denied" ? "text-red-600" : s === "expired" ? "text-muted-foreground" : "text-amber-600";
   if (key === "urgency") return s === "urgent" ? "text-red-600" : "text-foreground";
   return "text-foreground";
 }
