@@ -207,20 +207,26 @@ def _extract_names_from_transcript(agent_text: str, extracted: Dict[str, Any]) -
             m = re.search(pat, agent_text)
             if m:
                 extracted["provider_name"] = f"Dr. {m.group(1)}"
+                logger.info("Fallback provider_name from transcript: {}", extracted["provider_name"])
                 break
 
     if not extracted.get("patient_name"):
         patterns = [
+            r"([A-Z][a-z]+\s+[A-Z][a-z]+)(?:'s|'s)\s+(?:coverage|eligibility|plan|benefits|record|information)",
             r"(?:patient|member)\s+(?:named?\s+)?([A-Z][a-z]+\s+[A-Z][a-z]+)",
-            r"(?:record|information|details)\s+(?:for|of)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)",
-            r"(?:found|see|have|showing)\s+(?:a\s+)?(?:record|result|info|data)?\s*(?:for)?\s*([A-Z][a-z]+\s+[A-Z][a-z]+)",
+            r"(?:record|information|details|results?|coverage|eligibility)\s+(?:for|of)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)",
+            r"(?:found|see|have|showing|located)\s+(?:a\s+)?(?:record|result|info|data|coverage)?\s*(?:for)?\s*([A-Z][a-z]+\s+[A-Z][a-z]+)",
+            r"(?:for\s+)?([A-Z][a-z]+\s+[A-Z][a-z]+)\s+(?:is\s+)?(?:active|inactive|covered|eligible|enrolled)",
         ]
+        skip_names = {"the patient", "your patient", "this patient", "reflect health",
+                       "reflect silver", "reflect gold", "reflect bronze", "have a"}
         for pat in patterns:
             m = re.search(pat, agent_text)
             if m:
                 name = m.group(1)
-                if name.lower() not in ("the patient", "your patient", "this patient"):
+                if name.lower() not in skip_names:
                     extracted["patient_name"] = name
+                    logger.info("Fallback patient_name from transcript: {}", name)
                     break
 
 
@@ -234,15 +240,37 @@ def _detect_auth_success(
         return bool(valid) if isinstance(valid, bool) else str(valid).lower() == "true"
 
     lower = agent_text.lower()
+
+    # Explicit failure signals
+    if "wasn't able to validate" in lower or "unable to verify" in lower or "invalid npi" in lower:
+        return False
+
+    # Explicit success signals
     if "you're verified" in lower or "you are verified" in lower or "verification complete" in lower:
         return True
     if "zip verified" in lower or "zip confirmed" in lower:
         return True
+
     # Agent addressed the provider by name after auth → likely authenticated
     if extracted.get("provider_name") and extracted["provider_name"].lower() in lower:
         return True
-    if "wasn't able to validate" in lower or "unable to verify" in lower or "invalid npi" in lower:
-        return False
+
+    # If the agent successfully completed a data lookup, auth must have succeeded
+    # (the agent flow requires auth before any lookup)
+    found = extracted.get("found")
+    if found is True or str(found).lower() == "true":
+        return True
+
+    # Agent delivered eligibility/claims/PA results → auth was done
+    result_phrases = [
+        "coverage is active", "coverage is inactive", "plan name",
+        "copay is", "deductible is", "claim status", "claim has been",
+        "prior auth", "authorization status", "is covered", "is not covered",
+        "not covered under",
+    ]
+    if any(phrase in lower for phrase in result_phrases):
+        return True
+
     return None
 
 
@@ -453,6 +481,14 @@ async def save_conversation(body: SaveConversationRequest):
     elif outcome == "not_found":
         tags.append("not-found")
 
+    auth_success = _detect_auth_success(extracted, agent_text)
+
+    # Override call_successful: trust our own outcome over ElevenLabs analysis
+    if outcome == "resolved":
+        extracted["call_successful"] = True
+    elif outcome == "transferred":
+        extracted.setdefault("call_successful", False)
+
     record = CallRecord(
         call_id=call_id,
         phone_from="in-browser",
@@ -471,7 +507,7 @@ async def save_conversation(body: SaveConversationRequest):
         transferred=is_transferred,
         transfer_reason=transfer_reason,
         source="elevenlabs",
-        auth_success=_detect_auth_success(extracted, agent_text),
+        auth_success=auth_success,
         extracted_data=extracted,
     )
     await record.insert()
