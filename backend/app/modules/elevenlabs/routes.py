@@ -34,7 +34,8 @@ async def _fetch_conversation_details(conversation_id: str) -> Optional[Dict[str
 
     url = f"https://api.elevenlabs.io/v1/convai/conversations/{conversation_id}"
 
-    for attempt in range(4):
+    last_data = None
+    for attempt in range(6):
         try:
             async with httpx.AsyncClient(timeout=15) as client:
                 resp = await client.get(
@@ -43,33 +44,30 @@ async def _fetch_conversation_details(conversation_id: str) -> Optional[Dict[str
                 )
                 if resp.status_code == 404:
                     logger.info("ElevenLabs conversation {} not found yet (attempt {})", conversation_id, attempt + 1)
-                    await asyncio.sleep(2 * (attempt + 1))
+                    await asyncio.sleep(3 * (attempt + 1))
                     continue
                 resp.raise_for_status()
                 data = resp.json()
+                last_data = data
                 status = data.get("status", "")
+                logger.info(
+                    "ElevenLabs conversation {} attempt={} status='{}' transcript_len={} keys={}",
+                    conversation_id, attempt + 1, status,
+                    len(data.get("transcript") or []),
+                    list(data.keys()),
+                )
                 if status in ("done", "failed"):
                     return data
-                logger.info("ElevenLabs conversation {} status='{}', waiting...", conversation_id, status)
-                await asyncio.sleep(2 * (attempt + 1))
+                await asyncio.sleep(3 * (attempt + 1))
         except Exception as e:
             logger.warning("ElevenLabs conversation fetch error (attempt {}): {}", attempt + 1, e)
-            await asyncio.sleep(2)
+            await asyncio.sleep(3)
 
+    if last_data:
+        logger.warning("Returning ElevenLabs conversation {} with status='{}' after all retries",
+                        conversation_id, last_data.get("status"))
+        return last_data
     return None
-
-
-def _extract_tool_calls_from_details(details: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Extract tool call entries from the ElevenLabs conversation detail response."""
-    tool_calls = []
-    transcript = details.get("transcript") or []
-    for entry in transcript:
-        role = entry.get("role", "")
-        if role == "tool_call" or entry.get("tool_name"):
-            tool_calls.append(entry)
-        if role == "tool_result" or entry.get("tool_call_id"):
-            tool_calls.append(entry)
-    return tool_calls
 
 
 def _extract_data_from_conversation(details: Dict[str, Any]) -> Dict[str, Any]:
@@ -77,25 +75,39 @@ def _extract_data_from_conversation(details: Dict[str, Any]) -> Dict[str, Any]:
     extracted: Dict[str, Any] = {}
     transcript = details.get("transcript") or []
 
+    logger.info("Parsing ElevenLabs transcript: {} entries", len(transcript))
+    for i, entry in enumerate(transcript):
+        role = entry.get("role", "")
+        logger.debug("  transcript[{}] role='{}' keys={}", i, role, list(entry.keys()))
+
     pending_calls: Dict[str, Dict] = {}
 
     for entry in transcript:
         role = entry.get("role", "")
 
-        if role == "tool_call" or entry.get("tool_name"):
-            call_id = entry.get("tool_call_id", "")
-            pending_calls[call_id] = {
-                "tool_name": entry.get("tool_name", ""),
-                "params": entry.get("tool_input", entry.get("parameters", {})),
-            }
+        # Detect tool call entries (various formats ElevenLabs may use)
+        if role in ("tool_call", "tool-call") or entry.get("tool_name"):
+            call_id = entry.get("tool_call_id", entry.get("id", ""))
+            tool_name = entry.get("tool_name", entry.get("name", ""))
+            params = entry.get("tool_input", entry.get("parameters", entry.get("params", entry.get("arguments", {}))))
+            if isinstance(params, str):
+                try:
+                    params = json.loads(params)
+                except (ValueError, TypeError):
+                    params = {}
+            pending_calls[call_id] = {"tool_name": tool_name, "params": params or {}}
+            logger.info("  Tool call: id='{}' name='{}' params={}", call_id, tool_name, params)
 
-        if role == "tool_result" or (entry.get("tool_call_id") and entry.get("output")):
-            call_id = entry.get("tool_call_id", "")
+        # Detect tool result entries
+        if role in ("tool_result", "tool-result", "tool_response") or (
+            entry.get("tool_call_id") and (entry.get("output") or entry.get("tool_output") or entry.get("result"))
+        ):
+            call_id = entry.get("tool_call_id", entry.get("id", ""))
             tc = pending_calls.get(call_id, {})
-            name = tc.get("tool_name", entry.get("tool_name", "")).lower()
+            name = tc.get("tool_name", entry.get("tool_name", entry.get("name", ""))).lower()
             params = tc.get("params", {})
 
-            raw_output = entry.get("output", entry.get("tool_output", ""))
+            raw_output = entry.get("output", entry.get("tool_output", entry.get("result", "")))
             if isinstance(raw_output, str):
                 try:
                     result = json.loads(raw_output)
@@ -106,6 +118,7 @@ def _extract_data_from_conversation(details: Dict[str, Any]) -> Dict[str, Any]:
             else:
                 result = {}
 
+            logger.info("  Tool result: id='{}' name='{}' result_keys={}", call_id, name, list(result.keys()) if isinstance(result, dict) else str(result)[:100])
             _merge_tool_result(extracted, name, params, result)
 
     # Also check the analysis/data_collection fields ElevenLabs provides
@@ -117,6 +130,7 @@ def _extract_data_from_conversation(details: Dict[str, Any]) -> Dict[str, Any]:
         if v is not None:
             extracted.setdefault(k, v)
 
+    logger.info("Extracted data keys: {}", list(extracted.keys()))
     return {k: v for k, v in extracted.items() if v is not None}
 
 
@@ -177,6 +191,37 @@ def _merge_tool_result(extracted: Dict, name: str, params: Dict, result: Dict):
         extracted["expiration_date"] = result.get("expiration_date")
         extracted["denial_reason"] = result.get("denial_reason")
         extracted["notes"] = result.get("notes")
+
+
+def _extract_names_from_transcript(agent_text: str, extracted: Dict[str, Any]) -> None:
+    """Fallback: pull provider/patient names from agent speech if not in tool results."""
+    import re
+
+    if not extracted.get("provider_name"):
+        patterns = [
+            r"(?:Dr\.?|Doctor)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)",
+            r"verified.*?(?:Dr\.?|Doctor)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)",
+            r"(?:Hello|Hi),?\s+(?:Dr\.?|Doctor)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)",
+        ]
+        for pat in patterns:
+            m = re.search(pat, agent_text)
+            if m:
+                extracted["provider_name"] = f"Dr. {m.group(1)}"
+                break
+
+    if not extracted.get("patient_name"):
+        patterns = [
+            r"(?:patient|member)\s+(?:named?\s+)?([A-Z][a-z]+\s+[A-Z][a-z]+)",
+            r"(?:record|information|details)\s+(?:for|of)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)",
+            r"(?:found|see|have|showing)\s+(?:a\s+)?(?:record|result|info|data)?\s*(?:for)?\s*([A-Z][a-z]+\s+[A-Z][a-z]+)",
+        ]
+        for pat in patterns:
+            m = re.search(pat, agent_text)
+            if m:
+                name = m.group(1)
+                if name.lower() not in ("the patient", "your patient", "this patient"):
+                    extracted["patient_name"] = name
+                    break
 
 
 def _detect_auth_success(
@@ -367,7 +412,10 @@ async def save_conversation(body: SaveConversationRequest):
     if body.conversation_id:
         details = await _fetch_conversation_details(body.conversation_id)
         if details:
-            logger.info("Fetched ElevenLabs conversation details for {}", body.conversation_id)
+            logger.info("Fetched ElevenLabs conversation details for {} — top-level keys: {}", body.conversation_id, list(details.keys()))
+            raw_transcript = details.get("transcript") or []
+            for i, entry in enumerate(raw_transcript[:30]):
+                logger.info("  raw[{}] role='{}' keys={}", i, entry.get("role", "?"), list(entry.keys()))
             extracted = _extract_data_from_conversation(details)
 
             # Use ElevenLabs transcript if it has more entries (more complete)
@@ -387,6 +435,9 @@ async def save_conversation(body: SaveConversationRequest):
             logger.warning("Could not fetch ElevenLabs details for {}", body.conversation_id)
 
     user_text, agent_text = _split_transcript_by_role(transcript_entries)
+
+    # Fallback: extract names from spoken transcript if tool results didn't provide them
+    _extract_names_from_transcript(agent_text, extracted)
 
     intent = _determine_intent(extracted, user_text, transcript_text)
     outcome = _determine_outcome(extracted, agent_text)
@@ -424,6 +475,10 @@ async def save_conversation(body: SaveConversationRequest):
         extracted_data=extracted,
     )
     await record.insert()
-    logger.info("ElevenLabs conversation saved: {} intent={} outcome={} extracted_keys={}",
-                call_id, intent, outcome, list(extracted.keys()))
+    logger.info(
+        "ElevenLabs conversation saved: {} intent={} outcome={} provider='{}' patient='{}' extracted_keys={}",
+        call_id, intent, outcome,
+        extracted.get("provider_name"), extracted.get("patient_name"),
+        list(extracted.keys()),
+    )
     return {"call_id": call_id, "status": "saved"}
