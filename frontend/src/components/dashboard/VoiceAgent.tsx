@@ -132,7 +132,6 @@ export function VoiceAgent() {
   const endConversation = useCallback(async () => {
     if (isEndingRef.current) return;
     isEndingRef.current = true;
-    if (autoEndTimerRef.current) clearTimeout(autoEndTimerRef.current);
 
     await conversation.endSession();
     await saveAndCleanup();
