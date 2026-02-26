@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useConversation } from "@elevenlabs/react";
 import {
@@ -65,40 +65,53 @@ export function VoiceAgent() {
     }
   };
 
-  const conversation = useConversation({
-    onConnect: useCallback(() => {
-      setIsConnecting(false);
-      setError(null);
-      startTimeRef.current = new Date();
-      setSavedCallId(null);
-    }, []),
-    onDisconnect: useCallback(() => {
-      saveConversationRef.current?.();
-    }, []),
-    onMessage: useCallback((message: any) => {
-      if (message.type === "transcript" && message.role) {
-        const role = message.role === "user" ? "user" : "agent";
-        setMessages((prev) => {
-          if (!message.isFinal) {
-            const last = prev[prev.length - 1];
-            if (last && last.role === role && !last.isFinal) {
-              return [...prev.slice(0, -1), { ...last, text: message.message }];
-            }
-            return [...prev, { role, text: message.message, timestamp: new Date(), isFinal: false }];
-          }
+  const onConnect = useCallback(() => {
+    setIsConnecting(false);
+    setError(null);
+    startTimeRef.current = new Date();
+    setSavedCallId(null);
+  }, []);
+
+  const onDisconnect = useCallback(() => {
+    saveConversationRef.current?.();
+  }, []);
+
+  const onMessage = useCallback((message: any) => {
+    if (message.type === "transcript" && message.role) {
+      const role = message.role === "user" ? "user" : "agent";
+      setMessages((prev) => {
+        if (!message.isFinal) {
           const last = prev[prev.length - 1];
           if (last && last.role === role && !last.isFinal) {
-            return [...prev.slice(0, -1), { role, text: message.message, timestamp: new Date(), isFinal: true }];
+            return [...prev.slice(0, -1), { ...last, text: message.message }];
           }
-          return [...prev, { role, text: message.message, timestamp: new Date(), isFinal: true }];
-        });
-      }
-    }, []),
-    onError: useCallback((err: any) => {
-      setError(typeof err === "string" ? err : "Connection error");
-      setIsConnecting(false);
-    }, []),
-  });
+          return [...prev, { role, text: message.message, timestamp: new Date(), isFinal: false }];
+        }
+        const last = prev[prev.length - 1];
+        if (last && last.role === role && !last.isFinal) {
+          return [...prev.slice(0, -1), { role, text: message.message, timestamp: new Date(), isFinal: true }];
+        }
+        return [...prev, { role, text: message.message, timestamp: new Date(), isFinal: true }];
+      });
+    }
+  }, []);
+
+  const onError = useCallback((err: any) => {
+    console.error("[VoiceAgent] SDK error:", err);
+    setError(typeof err === "string" ? err : "Connection error");
+    setIsConnecting(false);
+  }, []);
+
+  const hookOptions = useMemo(() => ({
+    onConnect,
+    onDisconnect,
+    onMessage,
+    onError,
+    micMuted,
+    volume,
+  }), [onConnect, onDisconnect, onMessage, onError, micMuted, volume]);
+
+  const conversation = useConversation(hookOptions);
 
   useEffect(() => {
     if (transcriptRef.current) {
@@ -112,7 +125,8 @@ export function VoiceAgent() {
     setMessages([]);
 
     try {
-      await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
     } catch {
       setError("Microphone access is required. Please allow microphone access and try again.");
       setIsConnecting(false);
@@ -121,12 +135,11 @@ export function VoiceAgent() {
 
     try {
       const { signed_url } = await api.getElevenLabsSignedUrl();
-      const id = await conversation.startSession({
-        signedUrl: signed_url,
-      });
+      const id = await conversation.startSession({ signedUrl: signed_url });
       setConversationId(id);
     } catch (err: any) {
       const msg = err?.message || "Failed to start conversation";
+      console.error("[VoiceAgent] Start failed:", msg);
       if (msg.includes("503") || msg.includes("not configured")) {
         setError("ElevenLabs is not configured yet. Set ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID on the backend.");
       } else {
@@ -140,7 +153,7 @@ export function VoiceAgent() {
     try {
       await conversation.endSession();
     } catch {
-      // WebSocket may already be closed
+      // session may already be closed
     }
   }, [conversation]);
 
