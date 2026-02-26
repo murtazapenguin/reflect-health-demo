@@ -66,6 +66,9 @@ export function VoiceAgent() {
   };
 
   const onConnect = useCallback(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/986458bb-0a11-45ae-a614-d4552b9b9020',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VoiceAgent.tsx:onConnect',message:'Connected via WebSocket',data:{},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     setIsConnecting(false);
     setError(null);
     startTimeRef.current = new Date();
@@ -73,6 +76,9 @@ export function VoiceAgent() {
   }, []);
 
   const onDisconnect = useCallback(() => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/986458bb-0a11-45ae-a614-d4552b9b9020',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VoiceAgent.tsx:onDisconnect',message:'Disconnected',data:{hadMessages:messagesRef.current.length>0,conversationId:conversationIdRef.current},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
     saveConversationRef.current?.();
   }, []);
 
@@ -97,6 +103,9 @@ export function VoiceAgent() {
   }, []);
 
   const onError = useCallback((err: any) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/986458bb-0a11-45ae-a614-d4552b9b9020',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VoiceAgent.tsx:onError',message:'SDK error',data:{error:typeof err==='string'?err:err?.message||String(err)},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+    // #endregion
     console.error("[VoiceAgent] SDK error:", err);
     setError(typeof err === "string" ? err : "Connection error");
     setIsConnecting(false);
@@ -134,14 +143,26 @@ export function VoiceAgent() {
     }
 
     try {
-      const { token } = await api.getElevenLabsToken();
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/986458bb-0a11-45ae-a614-d4552b9b9020',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VoiceAgent.tsx:startConversation',message:'Fetching signed URL',data:{},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
+      const { signed_url } = await api.getElevenLabsSignedUrl();
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/986458bb-0a11-45ae-a614-d4552b9b9020',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VoiceAgent.tsx:startConversation',message:'Got signed URL, starting WebSocket session',data:{hasUrl:!!signed_url,urlPrefix:signed_url?.substring(0,50)},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
       const id = await conversation.startSession({
-        conversationToken: token,
-        connectionType: "webrtc",
+        signedUrl: signed_url,
+        connectionType: "websocket",
       });
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/986458bb-0a11-45ae-a614-d4552b9b9020',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VoiceAgent.tsx:startConversation',message:'Session started successfully',data:{conversationId:id},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
       setConversationId(id);
     } catch (err: any) {
       const msg = err?.message || "Failed to start conversation";
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/986458bb-0a11-45ae-a614-d4552b9b9020',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'VoiceAgent.tsx:startConversation',message:'Session start FAILED',data:{error:msg},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+      // #endregion
       console.error("[VoiceAgent] Start failed:", msg);
       if (msg.includes("503") || msg.includes("not configured")) {
         setError("ElevenLabs is not configured yet. Set ELEVENLABS_API_KEY and ELEVENLABS_AGENT_ID on the backend.");
