@@ -8,7 +8,7 @@ Build this pathway in the Bland AI developer portal at https://app.bland.ai/dash
 ## Global Prompt (Apply to All Nodes)
 
 ```
-You are a professional AI assistant for Reflect Health provider services. You handle calls from healthcare providers who need to check patient eligibility, claim status, or prior authorization status.
+You are a professional AI assistant for Reflect Health provider services. You handle calls from healthcare providers who need to check patient eligibility, claim status, or benefits information. You also handle calls from plan members checking their own coverage.
 
 Rules:
 - Be concise, professional, and helpful
@@ -20,10 +20,7 @@ Rules:
 - Pronounce dollar amounts naturally (e.g., "five hundred seventy dollars")
 - Pronounce dates naturally (e.g., "January first, twenty twenty-five")
 - For NPI numbers, read digits in groups of 3-3-4 (e.g., "one two three, four five six, seven eight nine zero")
-- For PA IDs, say "P A" then the digits (e.g., "P A zero zero zero one two three four five")
-- For PA status, use clear language: "approved", "denied", "currently under review", or "expired"
-- When reading prior auth details, always include the service description and PA ID
-- If a caller asks to SUBMIT a new prior authorization (not check status), transfer to a human — the AI only handles status checks
+- If a caller asks about prior authorization status or requests a new prior authorization, do not attempt to look it up — immediately offer to transfer them to the prior authorization team
 ```
 
 ## Voice Configuration
@@ -38,13 +35,14 @@ Rules:
 
 ### START NODE: Greeting
 - **Type**: Default Node
-- **Prompt**: "Thank you for calling Reflect Health provider services. I'm an AI assistant and can help with patient eligibility verification, claim status, or prior authorization requests. How can I help you today?"
+- **Prompt**: "Thank you for calling Reflect Health provider services. I'm an AI assistant and can help with patient eligibility verification, claim status, or benefits questions. Are you calling as a healthcare provider, or are you a plan member?"
 - **Extract Variables**:
-  - `call_intent` (string): Description: "The caller's intent. Extract 'eligibility' if they mention eligibility, coverage, benefits, or if a patient has insurance. Extract 'claims' if they mention claim, payment, denial, or check status. Extract 'prior_auth' if they mention prior authorization, prior auth, PA request, or authorization status. Extract 'other' for anything else."
+  - `call_intent` (string): Description: "The caller's intent. Extract 'eligibility' if they mention eligibility, coverage, benefits, or if a patient has insurance. Extract 'claims' if they mention claim, payment, denial, or check status. Extract 'other' for anything else."
+  - `caller_type` (string): Description: "Who is calling. Extract 'provider' if they identify as a doctor, office, billing staff, or healthcare provider. Extract 'member' if they identify as a patient or plan member. Extract 'unknown' if unclear."
 - **Pathways**:
-  - "Caller wants eligibility/coverage check" → NPI Authentication
-  - "Caller wants claim/payment status" → NPI Authentication
-  - "Caller wants to check on a prior authorization" → NPI Authentication
+  - "Caller is a provider AND wants eligibility/coverage/claims/benefits" → NPI Authentication
+  - "Caller is a member" → Member Authentication
+  - "Caller mentions prior authorization" → Transfer to Prior Auth Team
   - "Caller wants something else (billing dispute, general question, etc.)" → Transfer to Human
   - "Intent is unclear after two attempts" → Transfer to Human
 
@@ -82,9 +80,7 @@ Rules:
   - `zip_code` (string): Description: "The 5-digit zip code of the provider's practice"
 - **Webhook**: Call `VerifyZipCode` tool with npi and zip_code
 - **Pathways**:
-  - "Zip code verified AND call_intent is eligibility" → Eligibility: Collect Patient Info
-  - "Zip code verified AND call_intent is claims" → Claims: Collect Patient Info
-  - "Zip code verified AND call_intent is prior_auth" → PA: Collect Info
+  - "Zip code verified" → PHI Verification
   - "Zip code mismatch" → Zip Retry
 
 ---
@@ -96,8 +92,64 @@ Rules:
   - `zip_code` (string): Description: "The 5-digit zip code on retry"
 - **Webhook**: Call `VerifyZipCode` tool
 - **Pathways**:
-  - "Zip code verified" → Route based on call_intent (Eligibility or Claims)
+  - "Zip code verified" → PHI Verification
   - "Zip code still doesn't match" → Authentication Failure
+
+---
+
+### NODE: PHI Verification
+- **Type**: Wait for Response
+- **Prompt**: "Almost done. I'll need to verify the patient. Please provide the patient's full name, date of birth, and Member ID."
+- **Extract Variables**:
+  - `patient_name` (string): Description: "The patient's full name (first and last)"
+  - `patient_dob` (string): Description: "The patient's date of birth in YYYY-MM-DD format. Convert spoken dates like 'March 4th 1982' to '1982-03-04'"
+  - `member_id` (string): Description: "The member ID, typically in format MBR-XXXXXX. May also be stated as just digits."
+- **Condition**: "You must collect patient name and date of birth. Member ID is strongly preferred — if the caller doesn't have it, ask for SSN or address as a fallback."
+- **Rules**:
+  - If caller provides name + DOB + member_id → route to PHI Verified
+  - If caller provides name + DOB but NO member_id → collect fallback (SSN or address)
+  - If caller cannot provide name + DOB → Authentication Failure
+- **Pathways**:
+  - "Got name + DOB + member_id" → PHI Verified
+  - "Got name + DOB but no member_id" → PHI Fallback
+  - "Cannot provide sufficient info" → Authentication Failure
+
+---
+
+### NODE: PHI Fallback
+- **Type**: Wait for Response
+- **Prompt**: "No problem. If you don't have the Member ID, I can accept the patient's Social Security Number or their address on file instead."
+- **Extract Variables**:
+  - `patient_ssn` (string): Description: "The patient's Social Security Number (last 4 digits or full SSN)"
+  - `patient_address` (string): Description: "The patient's home address"
+- **Rules**:
+  - If either SSN or address is provided → route to PHI Verified (use name + DOB as primary lookup, SSN/address noted)
+  - If caller cannot provide either → Authentication Failure
+- **Pathways**:
+  - "Got SSN or address" → PHI Verified
+  - "Cannot provide fallback" → Authentication Failure
+
+---
+
+### NODE: PHI Verified
+- **Type**: Default Node
+- **Prompt**: "Got it. Let me pull that up for you."
+- **Pathways**:
+  - "call_intent is eligibility or benefits" → Eligibility: Lookup
+  - "call_intent is claims" → Claims: Get Claim Number
+  - "call_intent is unclear" → Intent Clarification
+
+---
+
+### NODE: Intent Clarification
+- **Type**: Wait for Response
+- **Prompt**: "What can I help you with today? I can check eligibility and coverage, or look up a claim status."
+- **Extract Variables**:
+  - `call_intent` (string): Description: "Extract 'eligibility' for coverage/benefits questions, 'claims' for claim status questions."
+- **Pathways**:
+  - "call_intent is eligibility" → Eligibility: Lookup
+  - "call_intent is claims" → Claims: Get Claim Number
+  - "Unclear after two attempts" → Transfer to Human
 
 ---
 
@@ -109,29 +161,66 @@ Rules:
   - `zip_code` (string): Description: "A new zip code if the caller wants to retry"
 - **Rules**:
   - If the caller wants to try again with a new NPI, call `AuthenticateProvider` webhook. If valid, route to Zip Code Verification.
-  - If the caller wants to try again with a new zip code, call `VerifyZipCode` webhook. If valid, route based on call_intent.
+  - If the caller wants to try again with a new zip code, call `VerifyZipCode` webhook. If valid, route to PHI Verification.
   - If the caller wants to be transferred, or if this is the third overall failure, transfer immediately.
   - Do not cycle back to this node more than once — if the caller already visited Authentication Failure and still can't verify, go straight to Transfer to Human.
 - **Pathways**:
   - "Caller retries NPI and it's valid" → Zip Code Verification
-  - "Caller retries zip code and it's valid" → Route based on call_intent (Eligibility or Claims)
+  - "Caller retries zip code and it's valid" → PHI Verification
   - "Caller wants to be transferred" → Transfer to Human
   - "Third failure or caller gives up" → Transfer to Human
 
 ---
 
-### NODE: Eligibility: Collect Patient Info
+### NODE: Member Authentication
 - **Type**: Wait for Response
-- **Prompt**: "You're verified. I can look up patient eligibility for you. What is the patient's first and last name, date of birth, and what service or procedure are you checking coverage for?"
+- **Prompt**: "I can help you with that. Please provide your Member ID to verify your identity. Your Member ID usually starts with MBR followed by some digits."
 - **Extract Variables**:
-  - `patient_name` (string): Description: "The patient's full name (first and last)"
-  - `patient_dob` (string): Description: "The patient's date of birth in YYYY-MM-DD format. Convert spoken dates like 'March 4th 1982' to '1982-03-04'"
-  - `service_type` (string): Description: "The medical service or procedure the provider is checking coverage for, if mentioned. Examples: MRI, physical therapy, lab work, specialist visit, surgery, chiropractic, mental health, CT scan, x-ray, urgent care, emergency room, prescription. Leave blank if not mentioned."
-- **Condition**: "You must get the patient's name and date of birth. The service type is optional at this stage."
-- **Post-extraction speech**: "I have {{patient_name}}, born {{patient_dob}}."
+  - `member_id` (string): Description: "The member's Member ID, typically in format MBR-XXXXXX."
+  - `caller_type` (string): Description: "Set to 'member' since the caller identified as a plan member."
+- **Condition**: "You must get a Member ID before proceeding."
+- **Webhook**: Call `LookupEligibility` tool with member_id only (no patient_name or npi)
 - **Pathways**:
-  - "Got patient info AND service_type is filled" → Eligibility: Lookup
-  - "Got patient info BUT service_type is empty" → Eligibility: Collect Service
+  - "Member found (found=true and status is active)" → Member: Eligibility Result
+  - "Member found but status is inactive or termed" → Eligibility: Inactive
+  - "Member not found" → Member Auth Failure
+
+---
+
+### NODE: Member Auth Failure
+- **Type**: Wait for Response
+- **Prompt**: "I wasn't able to locate that Member ID. Could you double-check the number and try again? Or I can transfer you to a team member."
+- **Extract Variables**:
+  - `member_id` (string): Description: "A corrected Member ID"
+- **Pathways**:
+  - "Caller provides corrected member_id" → Member Authentication
+  - "Caller wants transfer" → Transfer to Human
+
+---
+
+### NODE: Member: Eligibility Result
+- **Type**: Default Node
+- **Prompt**: "I found your account. You're on the {{plan_name}} plan, currently {{status}}. Your coverage effective date is {{effective_date}}. Primary care copay: ${{copay_primary}}. Specialist copay: ${{copay_specialist}}. Deductible: ${{deductible}} with ${{deductible_met}} met so far. Is there anything specific you'd like to check?"
+- **Rules**:
+  - Only read fields that have values.
+  - If the member asks about a specific service, proceed to Eligibility: Collect Service.
+- **Pathways**:
+  - "Member wants to check a specific service" → Eligibility: Collect Service
+  - "Member is done" → End Call
+  - "Member wants more help" → Transfer to Human
+
+---
+
+### NODE: Eligibility: Lookup
+- **Type**: Default Node
+- **Prompt**: "Let me look that up for you."
+- **Webhook**: Call `LookupEligibility` tool with npi, patient_name, patient_dob, member_id, service_type (if available)
+- **Pathways**:
+  - "Patient found, status is 'active', and service_covered is true" → Eligibility: Service Covered
+  - "Patient found, status is 'active', and service_covered is false" → Eligibility: Service Not Covered
+  - "Patient found, status is 'active', but service_covered is null (no service requested or unrecognized)" → Eligibility: Active
+  - "Patient found and status is 'inactive' or 'termed'" → Eligibility: Inactive
+  - "Patient not found" → Eligibility: Not Found
 
 ---
 
@@ -141,21 +230,11 @@ Rules:
 - **Extract Variables**:
   - `service_type` (string): Description: "The medical service or procedure. Examples: MRI, physical therapy, lab work, specialist visit, surgery, chiropractic, mental health, CT scan, x-ray, urgent care, emergency room, prescription."
 - **Condition**: "You must get a service type before proceeding."
+- **Webhook**: Call `LookupEligibility` tool with npi, patient_name, patient_dob, member_id, service_type
 - **Pathways**:
-  - "Got service type" → Eligibility: Lookup
-
----
-
-### NODE: Eligibility: Lookup
-- **Type**: Default Node
-- **Prompt**: "Let me look that up for you."
-- **Webhook**: Call `LookupEligibility` tool with npi, patient_name, patient_dob, service_type
-- **Pathways**:
-  - "Patient found, status is 'active', and service_covered is true" → Eligibility: Service Covered
-  - "Patient found, status is 'active', and service_covered is false" → Eligibility: Service Not Covered
-  - "Patient found, status is 'active', but service_covered is null (unrecognized service)" → Eligibility: Active
-  - "Patient found and status is 'inactive' or 'termed'" → Eligibility: Inactive
-  - "Patient not found" → Eligibility: Not Found
+  - "service_covered is true" → Eligibility: Service Covered
+  - "service_covered is false" → Eligibility: Service Not Covered
+  - "service_covered is null" → Eligibility: Active
 
 ---
 
@@ -168,9 +247,9 @@ Rules:
   - For prior_auth, say "Prior authorization IS required" or "No prior authorization needed."
 - **Pathways**:
   - "Caller wants to check another service for the same patient" → Eligibility: Collect Service
-  - "Caller wants to check another patient" → Eligibility: Collect Patient Info
+  - "Caller wants to check another patient" → PHI Verification
   - "Caller is done" → End Call
-  - "Caller wants to check a claim" → Claims: Collect Patient Info
+  - "Caller wants to check a claim" → Claims: Get Claim Number
 
 ---
 
@@ -188,9 +267,10 @@ Rules:
 - **Type**: Default Node
 - **Prompt**: "{{patient_name}} IS active on the {{plan_name}} plan. Coverage effective {{effective_date}}. Copay: ${{copay_primary}} primary care, ${{copay_specialist}} specialist. Deductible: ${{deductible}} with ${{deductible_met}} met so far. Coordination of benefits status: {{cob_status}}. Is there anything else I can help you with?"
 - **Pathways**:
-  - "Caller wants to check another patient" → Eligibility: Collect Patient Info
+  - "Caller wants to check a specific service" → Eligibility: Collect Service
+  - "Caller wants to check another patient" → PHI Verification
   - "Caller is done" → End Call
-  - "Caller wants to check a claim" → Claims: Collect Patient Info
+  - "Caller wants to check a claim" → Claims: Get Claim Number
 
 ---
 
@@ -200,50 +280,32 @@ Rules:
 - **Pathways**:
   - "Caller wants transfer" → Transfer to Human
   - "Caller is done" → End Call
-  - "Caller wants to check another patient" → Eligibility: Collect Patient Info
+  - "Caller wants to check another patient" → PHI Verification
 
 ---
 
 ### NODE: Eligibility: Not Found
 - **Type**: Wait for Response
-- **Prompt**: "I wasn't able to find that patient. Do you have their Member ID? I can try looking them up that way."
-- **Extract Variables**:
-  - `member_id` (string): Description: "The member ID, typically in format MBR-XXXXXX"
-- **Webhook**: Call `LookupEligibility` tool with member_id, service_type
+- **Prompt**: "I wasn't able to find that patient. Please double-check the name, date of birth, and Member ID and try again, or I can transfer you to a team member."
 - **Pathways**:
-  - "Patient found" → Route based on service_covered (Service Covered, Service Not Covered, or Active)
-  - "Still not found" → Transfer to Human
-
----
-
-### NODE: Claims: Collect Patient Info
-- **Type**: Wait for Response
-- **Prompt**: "I can look up a claim for you. What is the patient's first and last name, and date of birth?"
-- **Extract Variables**:
-  - `patient_name` (string): Description: "The patient's full name (first and last)"
-  - `patient_dob` (string): Description: "The patient's date of birth in YYYY-MM-DD format. Convert spoken dates like 'March 4th 1982' to '1982-03-04'"
-- **Condition**: "You must get both the patient's name and date of birth before proceeding."
-- **Post-extraction speech**: "Got it, {{patient_name}}, born {{patient_dob}}."
-
-> **IMPORTANT**: This node does NOT call any webhook. It only collects the patient name and DOB, then always routes to "Claims: Get Claim Number". Do not attach the LookupClaim webhook here.
-
-- **Pathways**:
-  - "Got patient name and date of birth" → Claims: Get Claim Number
+  - "Caller wants to retry with corrected info" → PHI Verification
+  - "Caller wants transfer" → Transfer to Human
 
 ---
 
 ### NODE: Claims: Get Claim Number
 - **Type**: Wait for Response
-- **Prompt**: "Do you have the claim number? It usually starts with CLM followed by a dash and some digits. If you don't have it, I can search by date of service instead."
+- **Prompt**: "I can look up a claim for you. Do you have the claim number? It usually starts with CLM followed by a dash and some digits. If you don't have it, I can search by date of service and total billed amount."
 - **Extract Variables**:
   - `claim_number` (string): Description: "The claim number, typically in format CLM-XXXXXXXX. Could also be spoken as just digits."
-  - `date_of_service` (string): Description: "The date of service in YYYY-MM-DD format, only if no claim number is provided"
+  - `date_of_service` (string): Description: "The date of service in YYYY-MM-DD format, only if no claim number is provided."
+  - `billed_amount` (string): Description: "The total billed amount in dollars, only if no claim number is provided. Example: '850' or '850 dollars'."
 - **Condition**: "You must get either a claim number OR a date of service before calling the webhook."
 - **Post-extraction speech**: "One moment while I look that up."
 
-> **IMPORTANT**: This is the ONLY claims node that calls the LookupClaim webhook. It must always be reached before calling the webhook.
+> **IMPORTANT**: This is the ONLY claims node that calls the LookupClaim webhook.
 
-- **Webhook**: Call `LookupClaim` tool with npi, claim_number, patient_name, patient_dob, date_of_service
+- **Webhook**: Call `LookupClaim` tool with npi, claim_number, patient_name, patient_dob, member_id, date_of_service, billed_amount
 - **Pathways**:
   - "Claim found and status is 'paid'" → Claims: Paid
   - "Claim found and status is 'denied'" → Claims: Denied
@@ -258,8 +320,8 @@ Rules:
 - **Type**: Default Node
 - **Prompt**: "Claim {{claim_number}} was processed on {{process_date}}. Billed: ${{billed_amount}}. Paid: ${{paid_amount}}. Check number: {{check_number}}. Patient responsibility: ${{patient_responsibility}}. Is there anything else I can help you with?"
 - **Pathways**:
-  - "Caller wants another claim" → Claims: Collect Patient Info
-  - "Caller wants eligibility" → Eligibility: Collect Patient Info
+  - "Caller wants another claim" → Claims: Get Claim Number
+  - "Caller wants eligibility" → PHI Verification
   - "Caller is done" → End Call
 
 ---
@@ -269,7 +331,7 @@ Rules:
 - **Prompt**: "Claim {{claim_number}} was denied on {{process_date}}. Reason: {{denial_code}} — {{denial_reason}}. You have until {{appeal_deadline}} to file an appeal. Would you like me to transfer you to the appeals team?"
 - **Pathways**:
   - "Caller wants transfer to appeals" → Transfer to Human
-  - "Caller wants another claim" → Claims: Collect Patient Info
+  - "Caller wants another claim" → Claims: Get Claim Number
   - "Caller is done" → End Call
 
 ---
@@ -278,23 +340,23 @@ Rules:
 - **Type**: Default Node
 - **Prompt**: "Claim {{claim_number}} is still being processed. It was received on {{received_date}}. Expected processing window is 30 days from receipt. Would you like me to send a fax confirmation of the current status?"
 - **Pathways**:
-  - "Caller wants fax or another claim" → Claims: Collect Patient Info
+  - "Caller wants fax or another claim" → Claims: Get Claim Number
   - "Caller is done" → End Call
 
 ---
 
 ### NODE: Claims: Patient Not Found
 - **Type**: Wait for Response
-- **Prompt**: "I wasn't able to find a patient matching that name and date of birth. Could you double-check the spelling and try again? Or I can transfer you to a team member."
+- **Prompt**: "I wasn't able to find a patient matching that information. Would you like to re-verify the patient details, or I can transfer you to a team member."
 - **Pathways**:
-  - "Caller provides corrected info" → Claims: Collect Patient Info
+  - "Caller wants to retry" → PHI Verification
   - "Caller wants transfer" → Transfer to Human
 
 ---
 
 ### NODE: Claims: No Claims
 - **Type**: Wait for Response
-- **Prompt**: "I found the patient, but there are no claims on file matching that information. Would you like to try a different claim number or date of service? Or I can transfer you to someone who can dig into this further."
+- **Prompt**: "I found the patient, but there are no claims on file matching that information. Would you like to try a different claim number, date of service, or billed amount? Or I can transfer you to someone who can dig into this further."
 - **Pathways**:
   - "Caller wants to try again" → Claims: Get Claim Number
   - "Caller wants transfer" → Transfer to Human
@@ -303,95 +365,17 @@ Rules:
 
 ### NODE: Claims: Claim Not Found
 - **Type**: Wait for Response
-- **Prompt**: "I wasn't able to find a claim matching that number. It's possible the claim number was entered differently in our system. Would you like to try a different claim number, or I can search by date of service instead? I can also transfer you to a team member who can dig into this further."
+- **Prompt**: "I wasn't able to find a claim matching that information. Would you like to try a different claim number, or search by date of service and billed amount instead? I can also transfer you to a team member who can help."
 - **Pathways**:
   - "Caller provides new info" → Claims: Get Claim Number
   - "Caller wants transfer" → Transfer to Human
 
 ---
 
-### NODE: PA: Collect Info
-- **Type**: Wait for Response
-- **Prompt**: "I can look up a prior authorization for you. Do you have the PA request ID? It usually starts with PA followed by a dash and some digits. If not, I can search by the patient's member ID."
-- **Extract Variables**:
-  - `pa_id` (string): Description: "The prior authorization request ID, typically in format PA-XXXXXXXX. Could also be spoken as just digits."
-  - `member_id` (string): Description: "The member ID, typically in format MBR-XXXXXX, only if no PA ID is provided"
-- **Condition**: "You must get either a PA request ID OR a member ID before proceeding."
-- **Post-extraction speech**: "One moment while I look that up."
-- **Pathways**:
-  - "Got PA ID or member ID" → PA: Lookup
-
----
-
-### NODE: PA: Lookup
-- **Type**: Default Node
-- **Prompt**: "Let me look that up for you."
-- **Webhook**: Call `LookupPriorAuth` tool with pa_id and member_id
-- **Pathways**:
-  - "PA found and pa_status is 'approved'" → PA: Approved
-  - "PA found and pa_status is 'denied'" → PA: Denied
-  - "PA found and pa_status is 'pending_review' or 'in_review'" → PA: Pending
-  - "PA found and pa_status is 'expired'" → PA: Expired
-  - "PA not found" → PA: Not Found
-
----
-
-### NODE: PA: Approved
-- **Type**: Default Node
-- **Prompt**: "Prior authorization {{pa_id}} for {{service_description}} has been APPROVED. It was approved on {{decision_date}}. Approved for: {{approved_units}}. This authorization expires on {{expiration_date}}. {{notes}}. Is there anything else I can help you with?"
-- **Rules**:
-  - Pronounce dates naturally.
-  - Only read fields that have values.
-- **Pathways**:
-  - "Caller wants to check another PA" → PA: Collect Info
-  - "Caller wants eligibility" → Eligibility: Collect Patient Info
-  - "Caller wants claims" → Claims: Collect Patient Info
-  - "Caller is done" → End Call
-
----
-
-### NODE: PA: Denied
-- **Type**: Default Node
-- **Prompt**: "Prior authorization {{pa_id}} for {{service_description}} was DENIED on {{decision_date}}. Reason: {{denial_reason}}. {{notes}}. Would you like me to transfer you to the appeals team, or is there anything else I can help with?"
-- **Pathways**:
-  - "Caller wants transfer to appeals" → Transfer to Human
-  - "Caller wants to check another PA" → PA: Collect Info
-  - "Caller is done" → End Call
-
----
-
-### NODE: PA: Pending
-- **Type**: Default Node
-- **Prompt**: "Prior authorization {{pa_id}} for {{service_description}} is currently UNDER REVIEW. It was submitted on {{submitted_date}} as a {{urgency}} request. {{notes}}. Standard review typically takes 5 to 7 business days. Would you like me to transfer you for an update, or is there anything else I can help with?"
-- **Rules**:
-  - For urgency, say "routine" or "urgent" naturally.
-- **Pathways**:
-  - "Caller wants transfer for update" → Transfer to Human
-  - "Caller wants to check another PA" → PA: Collect Info
-  - "Caller is done" → End Call
-
----
-
-### NODE: PA: Expired
-- **Type**: Default Node
-- **Prompt**: "Prior authorization {{pa_id}} for {{service_description}} was approved but has since EXPIRED. It expired on {{expiration_date}}. {{notes}}. A new authorization would need to be submitted. Would you like me to transfer you to someone who can help with a new request?"
-- **Pathways**:
-  - "Caller wants transfer" → Transfer to Human
-  - "Caller wants to check another PA" → PA: Collect Info
-  - "Caller is done" → End Call
-
----
-
-### NODE: PA: Not Found
-- **Type**: Wait for Response
-- **Prompt**: "I wasn't able to find a prior authorization matching that information. Could you double-check the PA request ID or member ID and try again? Or I can transfer you to a team member."
-- **Extract Variables**:
-  - `pa_id` (string): Description: "A corrected PA request ID"
-  - `member_id` (string): Description: "A corrected member ID"
-- **Webhook**: Call `LookupPriorAuth` tool if new info provided
-- **Pathways**:
-  - "PA found after retry" → Route based on pa_status (Approved, Denied, Pending, or Expired)
-  - "Still not found or caller wants transfer" → Transfer to Human
+### NODE: Transfer to Prior Auth Team
+- **Type**: Transfer Call
+- **Transfer Number**: 1-555-000-0150
+- **Prompt**: "Prior authorization requests and status checks are handled by our dedicated team. Let me connect you now. One moment please."
 
 ---
 
@@ -418,7 +402,7 @@ Rules:
   - Fax number for claims: 1-800-555-0199
   - Mailing address: PO Box 12345, Atlanta, GA 30301
   - Website: www.reflecthealth.com/providers
-  - For prior authorizations, please call 1-800-555-0150
+  - For prior authorizations, please call 1-555-000-0150
   - Appeal deadline: 180 days from denial date
   - Claims processing time: typically 30 business days
   ```
@@ -436,6 +420,7 @@ In the Inbound Phone Number settings:
 
 Configure the following in the pathway's analysis settings:
 - `call_intent`: "What was the caller's primary intent? (eligibility, claims, or other)"
+- `caller_type`: "Was the caller a provider or a member? (provider/member)"
 - `call_successful`: "Was the call resolved without needing a human transfer? (true/false)"
 - `transferred`: "Was the call transferred to a human agent? (true/false)"
-- `auth_success`: "Was the provider successfully authenticated? (true/false)"
+- `auth_success`: "Was the caller successfully authenticated? (true/false)"

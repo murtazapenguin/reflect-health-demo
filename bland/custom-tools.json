@@ -63,7 +63,7 @@
     },
     {
       "name": "LookupEligibility",
-      "description": "Looks up a patient's eligibility/coverage information and service-specific benefits. Call this after collecting the patient name, date of birth, and the service they are checking coverage for.",
+      "description": "Looks up a patient's eligibility/coverage information and service-specific benefits. Call this after collecting the patient name, date of birth, member ID, and (optionally) the service they are checking coverage for.",
       "url": "YOUR_BACKEND_URL/api/v1/voice/eligibility",
       "method": "POST",
       "headers": {
@@ -82,17 +82,17 @@
           "npi": "1234567890",
           "patient_name": "John Smith",
           "patient_dob": "1982-03-04",
-          "member_id": "",
+          "member_id": "MBR-001234",
           "service_type": "MRI"
         },
         "type": "object",
         "properties": {
           "speech": "string",
-          "npi": "string - the authenticated provider's NPI",
+          "npi": "string - the authenticated provider's NPI (empty for member self-service calls)",
           "patient_name": "string - patient's first and last name",
           "patient_dob": "YYYY-MM-DD - patient's date of birth",
-          "member_id": "string - optional member ID if name lookup failed",
-          "service_type": "string - the medical service or procedure to check coverage for (e.g., MRI, physical therapy, lab work)"
+          "member_id": "string - the patient's member ID (e.g., MBR-001234). Required for provider calls; used as primary lookup key.",
+          "service_type": "string - the medical service or procedure to check coverage for (e.g., MRI, physical therapy, lab work). Optional."
         }
       },
       "response": {
@@ -117,12 +117,12 @@
         "service_coinsurance": "$.service_coinsurance - integer, percentage the patient pays for this service (e.g., 20 means 20%). Null if flat copay applies instead.",
         "service_prior_auth": "$.service_prior_auth - boolean, whether prior authorization is required for this service",
         "service_visit_limit": "$.service_visit_limit - string, any visit limits for this service (e.g., '40 visits/year', 'Unlimited'). Null if no limit.",
-        "service_notes": "$.service_notes - string, additional notes about coverage for this service (e.g., 'Waived if admitted', 'PCP referral required', 'Not covered under HMO plan'). Null if none."
+        "service_notes": "$.service_notes - string, additional notes about coverage for this service. Null if none."
       }
     },
     {
       "name": "LookupClaim",
-      "description": "Looks up a claim by claim number or by patient + date of service. Call this after collecting claim information.",
+      "description": "Looks up a claim by claim number, or by member ID + date of service + billed amount when no claim number is available. Always pass member_id when available (from PHI verification). Call this after collecting claim information.",
       "url": "YOUR_BACKEND_URL/api/v1/voice/claims",
       "method": "POST",
       "headers": {
@@ -133,25 +133,31 @@
         "claim_number": "{{input.claim_number}}",
         "patient_name": "{{input.patient_name}}",
         "patient_dob": "{{input.patient_dob}}",
-        "date_of_service": "{{input.date_of_service}}"
+        "member_id": "{{input.member_id}}",
+        "date_of_service": "{{input.date_of_service}}",
+        "billed_amount": "{{input.billed_amount}}"
       },
       "input_schema": {
         "example": {
           "speech": "One moment while I look that up.",
           "npi": "1234567890",
-          "claim_number": "CLM-00481922",
+          "claim_number": "",
           "patient_name": "John Smith",
           "patient_dob": "1982-03-04",
-          "date_of_service": ""
+          "member_id": "MBR-001234",
+          "date_of_service": "2025-11-15",
+          "billed_amount": "850"
         },
         "type": "object",
         "properties": {
           "speech": "string",
           "npi": "string - the authenticated provider's NPI",
-          "claim_number": "string - the claim number (e.g. CLM-00481922)",
-          "patient_name": "string - patient name if no claim number",
+          "claim_number": "string - the claim number (e.g. CLM-00481922). Leave empty if caller doesn't have it.",
+          "patient_name": "string - patient name (fallback if no member_id)",
           "patient_dob": "YYYY-MM-DD - patient DOB",
-          "date_of_service": "YYYY-MM-DD - date of service if no claim number"
+          "member_id": "string - the patient's member ID from PHI verification (e.g., MBR-001234). Preferred over patient_name for lookup.",
+          "date_of_service": "YYYY-MM-DD - date of service when no claim number is available",
+          "billed_amount": "string - total billed amount in dollars (e.g. '850' or '42000') when no claim number is available"
         }
       },
       "response": {
@@ -171,49 +177,6 @@
         "denial_code": "$.denial_code",
         "denial_reason": "$.denial_reason",
         "appeal_deadline": "$.appeal_deadline"
-      }
-    },
-    {
-      "name": "LookupPriorAuth",
-      "description": "Looks up a prior authorization request by PA ID or member ID. Call this after the provider asks to check on a prior auth status.",
-      "url": "YOUR_BACKEND_URL/api/v1/voice/prior-auth",
-      "method": "POST",
-      "headers": {
-        "Content-Type": "application/json"
-      },
-      "body": {
-        "pa_id": "{{input.pa_id}}",
-        "member_id": "{{input.member_id}}"
-      },
-      "input_schema": {
-        "example": {
-          "speech": "Let me look up that prior authorization for you.",
-          "pa_id": "PA-00012345",
-          "member_id": ""
-        },
-        "type": "object",
-        "properties": {
-          "speech": "string - what to say while the tool runs",
-          "pa_id": "string - the prior authorization request ID (e.g., PA-00012345)",
-          "member_id": "string - the member ID to look up the most recent PA (e.g., MBR-001234)"
-        }
-      },
-      "response": {
-        "found": "$.found - boolean, whether a prior auth was found",
-        "message": "$.message - string, error message if not found (null on success)",
-        "pa_id": "$.pa_id - string, the prior authorization request ID (e.g., PA-00012345)",
-        "member_id": "$.member_id - string, the patient's member ID",
-        "patient_name": "$.patient_name - string, the patient's full name",
-        "service_description": "$.service_description - string, what the PA is for (e.g., 'MRI Lumbar Spine', 'Physical Therapy')",
-        "procedure_code": "$.procedure_code - string, the CPT procedure code",
-        "pa_status": "$.status - string, the PA status: 'approved', 'denied', 'pending_review', 'in_review', or 'expired'",
-        "urgency": "$.urgency - string, 'routine' or 'urgent'",
-        "submitted_date": "$.submitted_date - string, when the PA was submitted (YYYY-MM-DD)",
-        "decision_date": "$.decision_date - string, when the decision was made (null if pending)",
-        "expiration_date": "$.expiration_date - string, when the approval expires (null if not approved)",
-        "approved_units": "$.approved_units - string, what was approved (e.g., '1 procedure', '6 visits', '5 days'). Null if not approved.",
-        "denial_reason": "$.denial_reason - string, reason for denial if denied. Null if not denied.",
-        "notes": "$.notes - string, additional notes about the PA request"
       }
     }
   ]

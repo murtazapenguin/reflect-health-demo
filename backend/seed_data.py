@@ -24,7 +24,6 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from app.models.call_record import CallRecord
 from app.models.claim import Claim
 from app.models.member import Member
-from app.models.prior_auth import PriorAuth
 from app.models.provider import Provider
 from app.models.user import User
 
@@ -325,28 +324,6 @@ CLAIMS = [
     {"claim_number": "CLM-00485700", "member_id": "MBR-001253", "provider_npi": "8901234567", "date_of_service": "2025-11-12", "procedure_code": "95819", "procedure_desc": "Electroencephalogram (EEG)", "status": "paid", "billed_amount": 1650.00, "allowed_amount": 1400.00, "paid_amount": 1370.00, "patient_responsibility": 30.00, "check_number": "CHK-0019200", "process_date": "2025-11-30", "received_date": "2025-11-13", "denial_code": None, "denial_reason": None, "appeal_deadline": None},
 ]
 
-# ---------- PRIOR AUTHORIZATIONS ----------
-
-PRIOR_AUTHS = [
-    # Demo records for John Smith (MBR-001234) — linked to Dr. Sohal
-    {"pa_id": "PA-00012345", "member_id": "MBR-001234", "provider_npi": "1003045220", "service_description": "MRI Lumbar Spine", "procedure_code": "72148", "status": "approved", "urgency": "routine", "submitted_date": "2026-01-15", "decision_date": "2026-01-18", "expiration_date": "2026-07-18", "approved_units": "1 procedure", "denial_reason": None, "notes": "Approved for single MRI lumbar spine without contrast"},
-    {"pa_id": "PA-00012400", "member_id": "MBR-001234", "provider_npi": "1003045683", "service_description": "Knee Arthroscopy", "procedure_code": "29881", "status": "denied", "urgency": "routine", "submitted_date": "2026-01-20", "decision_date": "2026-01-28", "expiration_date": None, "approved_units": None, "denial_reason": "Medical necessity criteria not met — conservative treatment not yet exhausted", "notes": "Recommend 6 weeks physical therapy before resubmission"},
-    {"pa_id": "PA-00012500", "member_id": "MBR-001234", "provider_npi": "1003045220", "service_description": "Physical Therapy", "procedure_code": "97110", "status": "pending_review", "urgency": "routine", "submitted_date": "2026-02-10", "decision_date": None, "expiration_date": None, "approved_units": None, "denial_reason": None, "notes": "Requesting 12 visits for lower back rehabilitation"},
-    # --- Dr. Tileston PA records ---
-    {"pa_id": "PA-00012510", "member_id": "MBR-001235", "provider_npi": "1003045683", "service_description": "Total Knee Replacement", "procedure_code": "27447", "status": "approved", "urgency": "routine", "submitted_date": "2025-11-15", "decision_date": "2025-11-22", "expiration_date": "2026-05-22", "approved_units": "1 procedure", "denial_reason": None, "notes": "Pre-authorized for left total knee arthroplasty"},
-    {"pa_id": "PA-00012520", "member_id": "MBR-001236", "provider_npi": "1003045683", "service_description": "Shoulder MRI with Contrast", "procedure_code": "73222", "status": "pending_review", "urgency": "routine", "submitted_date": "2026-02-18", "decision_date": None, "expiration_date": None, "approved_units": None, "denial_reason": None, "notes": "Awaiting peer review — rotator cuff tear suspected"},
-    # --- Dr. Edmonds PA records ---
-    {"pa_id": "PA-00012530", "member_id": "MBR-001237", "provider_npi": "1003044728", "service_description": "Home Hospice Care", "procedure_code": "99377", "status": "approved", "urgency": "urgent", "submitted_date": "2025-12-18", "decision_date": "2025-12-18", "expiration_date": "2026-06-18", "approved_units": "90 days", "denial_reason": None, "notes": "Approved for home-based hospice — terminal diagnosis confirmed"},
-    # --- Dr. Enkeshafi PA records ---
-    {"pa_id": "PA-00012540", "member_id": "MBR-001242", "provider_npi": "1003000126", "service_description": "Inpatient Admission — Pneumonia", "procedure_code": "99223", "status": "denied", "urgency": "urgent", "submitted_date": "2026-01-25", "decision_date": "2026-01-30", "expiration_date": None, "approved_units": None, "denial_reason": "Does not meet inpatient criteria — recommend observation status", "notes": "Clinical reviewer suggests outpatient observation for 24h"},
-    # Other members
-    {"pa_id": "PA-00012600", "member_id": "MBR-001235", "provider_npi": "2345678901", "service_description": "CT Scan Abdomen", "procedure_code": "74177", "status": "approved", "urgency": "urgent", "submitted_date": "2026-02-01", "decision_date": "2026-02-01", "expiration_date": "2026-08-01", "approved_units": "1 procedure", "denial_reason": None, "notes": "Expedited review — urgent clinical indication"},
-    {"pa_id": "PA-00012700", "member_id": "MBR-001237", "provider_npi": "1003044728", "service_description": "Inpatient Admission", "procedure_code": "99223", "status": "approved", "urgency": "urgent", "submitted_date": "2025-12-20", "decision_date": "2025-12-20", "expiration_date": "2026-03-20", "approved_units": "5 days", "denial_reason": None, "notes": "Pre-authorized for elective hip replacement surgery"},
-    {"pa_id": "PA-00012800", "member_id": "MBR-001241", "provider_npi": "1003045220", "service_description": "Outpatient Surgery — Carpal Tunnel Release", "procedure_code": "64721", "status": "in_review", "urgency": "routine", "submitted_date": "2026-02-15", "decision_date": None, "expiration_date": None, "approved_units": None, "denial_reason": None, "notes": "Clinical documentation under review by medical director"},
-    {"pa_id": "PA-00012900", "member_id": "MBR-001242", "provider_npi": "3456789012", "service_description": "Cardiac Stress Test", "procedure_code": "93015", "status": "expired", "urgency": "routine", "submitted_date": "2025-06-01", "decision_date": "2025-06-05", "expiration_date": "2025-12-05", "approved_units": "1 procedure", "denial_reason": None, "notes": "Authorization expired — procedure was not completed within window"},
-    {"pa_id": "PA-00013000", "member_id": "MBR-001247", "provider_npi": "1003045683", "service_description": "MRI Brain with Contrast", "procedure_code": "70553", "status": "denied", "urgency": "routine", "submitted_date": "2026-01-08", "decision_date": "2026-01-15", "expiration_date": None, "approved_units": None, "denial_reason": "Duplicate request — prior MRI performed within 90 days", "notes": "Previous MRI on 2025-11-01 showed no abnormalities"},
-]
-
 # ---------- HISTORICAL CALL RECORDS ----------
 
 SAMPLE_TRANSCRIPTS = {
@@ -379,9 +356,9 @@ SAMPLE_TRANSCRIPTS = {
         {"speaker": "AI", "text": "Thank you for calling Reflect Health. Have a great day."},
     ],
     "transferred_out_of_scope": [
-        {"speaker": "AI", "text": "Thank you for calling Reflect Health provider services. I'm an AI assistant and can help with patient eligibility verification, claim status, or prior authorization lookups. How can I help you today?"},
-        {"speaker": "Provider", "text": "I need to submit a brand new prior authorization for a patient."},
-        {"speaker": "AI", "text": "I can look up existing prior authorizations, but I'm not able to submit new ones. Let me connect you with one of our team members who can help process that submission. One moment please."},
+        {"speaker": "AI", "text": "Thank you for calling Reflect Health provider services. I'm an AI assistant and can help with patient eligibility verification or claim status inquiries. How can I help you today?"},
+        {"speaker": "Provider", "text": "I need to check on a prior authorization for a patient."},
+        {"speaker": "AI", "text": "For prior authorization inquiries, I'll connect you directly with our Prior Auth team. One moment please."},
     ],
     "transferred_frustration": [
         {"speaker": "AI", "text": "Thank you for calling Reflect Health provider services. I'm an AI assistant and can help with patient eligibility verification or claim status inquiries. Which one brings you in today?"},
@@ -397,7 +374,7 @@ SAMPLE_TRANSCRIPTS = {
         {"speaker": "AI", "text": "I understand this is frustrating, and I apologize for the difficulty. Let me connect you with one of our team members who can help you directly. One moment please."},
     ],
     "transferred_auth_failed": [
-        {"speaker": "AI", "text": "Thank you for calling Reflect Health provider services. I'm an AI assistant and can help with eligibility, claims, or prior authorizations. How can I help?"},
+        {"speaker": "AI", "text": "Thank you for calling Reflect Health provider services. I'm an AI assistant and can help with eligibility or claims inquiries. How can I help?"},
         {"speaker": "Provider", "text": "Hi, I need to check on a claim."},
         {"speaker": "AI", "text": "Sure, I can help with that. Could you please provide your 10-digit National Provider Identifier?"},
         {"speaker": "Provider", "text": "9999999999."},
@@ -440,13 +417,13 @@ def _generate_call_records(count: int):
             transfer_reason = None
             tags = ["claims", "auto-resolved"]
         elif roll < 0.80:
-            intent = "prior_auth"
+            intent = random.choice(["eligibility", "claims"])
             outcome = "resolved"
             duration = random.randint(50, 130)
-            transcript = SAMPLE_TRANSCRIPTS["eligibility_resolved"]
+            transcript = SAMPLE_TRANSCRIPTS["eligibility_resolved" if intent == "eligibility" else "claims_resolved"]
             transferred = False
             transfer_reason = None
-            tags = ["prior_auth", "auto-resolved"]
+            tags = [intent, "auto-resolved"]
         elif roll < 0.88:
             intent = "other"
             outcome = "transferred"
@@ -517,7 +494,7 @@ async def seed():
 
     await init_beanie(
         database=db,
-        document_models=[User, Provider, Member, Claim, PriorAuth, CallRecord],
+        document_models=[User, Provider, Member, Claim, CallRecord],
     )
 
     # Clear existing data
@@ -526,7 +503,6 @@ async def seed():
     await Provider.delete_all()
     await Member.delete_all()
     await Claim.delete_all()
-    await PriorAuth.delete_all()
     await CallRecord.delete_all()
 
     # Seed admin user
@@ -555,11 +531,6 @@ async def seed():
     for c in CLAIMS:
         await Claim(**c).insert()
 
-    # Seed prior authorizations
-    print(f"Seeding {len(PRIOR_AUTHS)} prior authorizations...")
-    for pa in PRIOR_AUTHS:
-        await PriorAuth(**pa).insert()
-
     # Seed call records
     call_records_data = _generate_call_records(50)
     print(f"Seeding {len(call_records_data)} call records...")
@@ -571,7 +542,6 @@ async def seed():
     print(f"  Providers: {await Provider.count()}")
     print(f"  Members: {await Member.count()}")
     print(f"  Claims: {await Claim.count()}")
-    print(f"  Prior Auths: {await PriorAuth.count()}")
     print(f"  Call Records: {await CallRecord.count()}")
     print(f"\nDemo credentials: admin@reflecthealth.com / demo2026")
 

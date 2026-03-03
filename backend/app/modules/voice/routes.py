@@ -6,14 +6,12 @@ from app.modules.voice.schemas import (
     AuthenticateNPIResponse,
     ClaimsResponse,
     EligibilityResponse,
-    PriorAuthResponse,
     VerifyZipResponse,
 )
 from app.modules.voice.service import (
     authenticate_npi,
     lookup_claims,
     lookup_eligibility,
-    lookup_prior_auth,
     verify_zip,
 )
 
@@ -88,15 +86,7 @@ async def api_claims(request: Request):
         claim_number=data.get("claim_number"),
         patient_name=data.get("patient_name"),
         patient_dob=data.get("patient_dob"),
-        date_of_service=data.get("date_of_service"),
-    )
-
-
-@router.post("/prior-auth", response_model=PriorAuthResponse, summary="Look up prior authorization status")
-async def api_prior_auth(request: Request):
-    data = await _safe_json(request)
-    logger.info("prior-auth received: {}", data)
-    return await lookup_prior_auth(
-        pa_id=data.get("pa_id"),
         member_id=data.get("member_id"),
+        date_of_service=data.get("date_of_service"),
+        billed_amount=data.get("billed_amount"),
     )

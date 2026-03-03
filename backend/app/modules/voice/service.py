@@ -5,14 +5,12 @@ from loguru import logger
 
 from app.models.claim import Claim
 from app.models.member import Member
-from app.models.prior_auth import PriorAuth
 from app.models.provider import Provider
 from app.modules.voice.cms_client import lookup_npi_from_cms
 from app.modules.voice.schemas import (
     AuthenticateNPIResponse,
     ClaimsResponse,
     EligibilityResponse,
-    PriorAuthResponse,
     VerifyZipResponse,
 )
 
@@ -488,7 +486,9 @@ async def lookup_claims(
     claim_number: Optional[str] = None,
     patient_name: Optional[str] = None,
     patient_dob: Optional[str] = None,
+    member_id: Optional[str] = None,
     date_of_service: Optional[str] = None,
+    billed_amount: Optional[str] = None,
 ) -> ClaimsResponse:
     if claim_number:
         claim_clean = _normalize_claim_number(claim_number)
@@ -510,6 +510,39 @@ async def lookup_claims(
             "Please verify the claim number and try again.",
         )
 
+    # Direct member_id lookup (preferred — provided by PHI verification step)
+    if member_id:
+        mid = member_id.strip().upper()
+        if not mid.startswith("MBR"):
+            mid = f"MBR-{mid.lstrip('-')}"
+        claim_query: dict = {"member_id": mid}
+        if date_of_service:
+            dos_normalized = _normalize_dob(date_of_service)
+            claim_query["date_of_service"] = dos_normalized or date_of_service.strip()
+        if billed_amount:
+            try:
+                billed_clean = float(re.sub(r"[^0-9.]", "", billed_amount))
+                claim_query["billed_amount"] = billed_clean
+            except (ValueError, TypeError):
+                logger.warning("Could not parse billed_amount: '{}'", billed_amount)
+        logger.info("Claims lookup by member_id='{}' dos='{}' billed='{}'", mid, date_of_service, billed_amount)
+        claims = await Claim.find(claim_query).sort("-date_of_service").to_list()
+        if claims:
+            return _claim_to_response(claims[0])
+        # Retry without billed_amount if no exact match (billed amount may be slightly off)
+        if billed_amount and date_of_service:
+            claim_query_no_billed = {k: v for k, v in claim_query.items() if k != "billed_amount"}
+            claims = await Claim.find(claim_query_no_billed).sort("-date_of_service").to_list()
+            if claims:
+                return _claim_to_response(claims[0])
+        return ClaimsResponse(
+            found=False,
+            message=f"Patient found (member ID {mid}), but no claims on file"
+            + (f" for date of service '{date_of_service}'" if date_of_service else "")
+            + (f" with billed amount '{billed_amount}'" if billed_amount else "")
+            + ".",
+        )
+
     if patient_name:
         logger.info("Claims patient lookup: name='{}' dob='{}'", patient_name, patient_dob)
         members = await _find_members_fuzzy(patient_name, patient_dob)
@@ -526,6 +559,12 @@ async def lookup_claims(
         if date_of_service:
             dos_normalized = _normalize_dob(date_of_service)
             claim_query["date_of_service"] = dos_normalized or date_of_service.strip()
+        if billed_amount:
+            try:
+                billed_clean = float(re.sub(r"[^0-9.]", "", billed_amount))
+                claim_query["billed_amount"] = billed_clean
+            except (ValueError, TypeError):
+                logger.warning("Could not parse billed_amount: '{}'", billed_amount)
 
         claims = await Claim.find(claim_query).sort("-date_of_service").to_list()
         if claims:
@@ -539,10 +578,10 @@ async def lookup_claims(
             + ".",
         )
 
-    logger.info("Claims lookup failed: claim={} name={} dos={}", claim_number, patient_name, date_of_service)
+    logger.info("Claims lookup failed: claim={} member_id={} name={} dos={}", claim_number, member_id, patient_name, date_of_service)
     return ClaimsResponse(
         found=False,
-        message="No claim number or patient name provided. Please provide at least one.",
+        message="No claim number, member ID, or patient name provided. Please provide at least one.",
     )
 
 
@@ -567,88 +606,3 @@ def _claim_to_response(claim: Claim) -> ClaimsResponse:
     )
 
 
-# ---------------------------------------------------------------------------
-# Prior Authorization lookup
-# ---------------------------------------------------------------------------
-
-def _normalize_pa_id(raw: str) -> str:
-    """Normalize spoken PA IDs: 'P A dash 1 2 3 4 5' → 'PA-00012345'."""
-    cleaned = raw.strip().upper().replace(" ", "")
-    cleaned = re.sub(r"[^A-Z0-9\-]", "", cleaned)
-    if not cleaned.startswith("PA"):
-        digits = re.sub(r"[^0-9]", "", cleaned)
-        if digits:
-            cleaned = f"PA-{digits.zfill(8)}"
-    if cleaned.startswith("PA") and "-" not in cleaned:
-        cleaned = "PA-" + cleaned[2:]
-    parts = cleaned.split("-", 1)
-    if len(parts) == 2 and parts[1]:
-        cleaned = f"PA-{parts[1].zfill(8)}"
-    return cleaned
-
-
-async def lookup_prior_auth(
-    pa_id: Optional[str] = None,
-    member_id: Optional[str] = None,
-) -> PriorAuthResponse:
-    if pa_id:
-        pa_clean = _normalize_pa_id(pa_id)
-        logger.info("PA lookup raw='{}' normalized='{}'", pa_id, pa_clean)
-        pa = await PriorAuth.find_one(PriorAuth.pa_id == pa_clean)
-        if not pa:
-            digits = re.sub(r"[^0-9]", "", pa_clean)
-            if digits:
-                pa = await PriorAuth.find_one(
-                    {"pa_id": {"$regex": digits, "$options": "i"}}
-                )
-        if pa:
-            return await _pa_to_response(pa)
-        return PriorAuthResponse(
-            found=False,
-            message=f"No prior authorization found with ID '{pa_id}' (searched as '{pa_clean}').",
-        )
-
-    if member_id:
-        mid = member_id.strip().upper()
-        if not mid.startswith("MBR"):
-            mid = f"MBR-{mid.lstrip('-')}"
-        logger.info("PA lookup by member_id='{}'", mid)
-        pa = await PriorAuth.find_one(
-            PriorAuth.member_id == mid,
-            sort=[("submitted_date", -1)],
-        )
-        if pa:
-            return await _pa_to_response(pa)
-        return PriorAuthResponse(
-            found=False,
-            message=f"No prior authorization found for member '{mid}'.",
-        )
-
-    return PriorAuthResponse(
-        found=False,
-        message="Please provide a PA request ID or member ID.",
-    )
-
-
-async def _pa_to_response(pa: PriorAuth) -> PriorAuthResponse:
-    patient_name = None
-    member = await Member.find_one(Member.member_id == pa.member_id)
-    if member:
-        patient_name = f"{member.first_name} {member.last_name}"
-
-    return PriorAuthResponse(
-        found=True,
-        pa_id=pa.pa_id,
-        member_id=pa.member_id,
-        patient_name=patient_name,
-        service_description=pa.service_description,
-        procedure_code=pa.procedure_code,
-        status=pa.status,
-        urgency=pa.urgency,
-        submitted_date=pa.submitted_date,
-        decision_date=pa.decision_date,
-        expiration_date=pa.expiration_date,
-        approved_units=pa.approved_units,
-        denial_reason=pa.denial_reason,
-        notes=pa.notes,
-    )
