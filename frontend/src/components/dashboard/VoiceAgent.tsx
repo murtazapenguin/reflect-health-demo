@@ -132,12 +132,6 @@ export function VoiceAgent() {
       const { signed_url } = await api.getElevenLabsSignedUrl();
       const id = await conversation.startSession({
         signedUrl: signed_url,
-        overrides: {
-          agent: {
-            firstMessage:
-              "Thank you for calling Reflect Health, this is an AI assistant. I can help with eligibility verification or claims status. How can I help you today?",
-          },
-        },
       });
       setConversationId(id);
     } catch (err: any) {
