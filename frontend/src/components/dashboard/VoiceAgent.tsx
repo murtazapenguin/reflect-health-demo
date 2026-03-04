@@ -76,17 +76,26 @@ function buildStepsCompleted(messages: Message[]): string[] {
     if (allText.includes("verified") || allText.includes("dr.") || allText.includes("doctor")) {
       steps.push("Provider identity verified via NPI lookup");
     } else {
-      steps.push("NPI provided but verification failed");
+      steps.push("NPI provided — verification attempted");
     }
   }
-  if (allText.includes("zip") && (allText.includes("verified") || allText.includes("confirmed"))) {
-    steps.push("Practice zip code confirmed");
+  if (allText.includes("zip")) {
+    if (allText.includes("verified") || allText.includes("confirmed")) {
+      steps.push("Practice zip code confirmed");
+    } else {
+      steps.push("Zip code verification attempted");
+    }
+  }
+  if (allText.includes("member id") || allText.includes("mbr-") || allText.includes("patient name") || allText.includes("date of birth")) {
+    steps.push("Patient PHI collected for identity verification");
   }
   if (allText.includes("eligib") || allText.includes("coverage")) {
     if (allText.includes("active") || allText.includes("found")) {
       steps.push("Patient eligibility verified — member active");
     } else if (allText.includes("not found") || allText.includes("no patient")) {
       steps.push("Patient lookup attempted — member not found");
+    } else {
+      steps.push("Eligibility inquiry initiated");
     }
   }
   if (allText.includes("claim")) {
@@ -142,6 +151,15 @@ function buildExtractedData(messages: Message[]): Record<string, string> {
 
     const planMatch = m.text.match(/Reflect\s+(Gold|Silver|Platinum)\s+(PPO|HMO)/i);
     if (planMatch && !data["Plan"]) data["Plan"] = planMatch[0];
+
+    const dobMatch = m.text.match(/\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/);
+    if (dobMatch && !data["DOB"]) data["DOB"] = dobMatch[1];
+
+    const dosMatch = m.text.match(/date of service[:\s]+([^\n,.]+)/i);
+    if (dosMatch && !data["Date of Service"]) data["Date of Service"] = dosMatch[1].trim();
+
+    const statusMatch = m.text.match(/(?:claim|status|coverage)\s+(?:is\s+)?(?:currently\s+)?(active|inactive|termed|paid|denied|pending|in[- ]process)/i);
+    if (statusMatch && !data["Status"]) data["Status"] = statusMatch[1].charAt(0).toUpperCase() + statusMatch[1].slice(1);
   }
 
   return data;
@@ -163,6 +181,7 @@ export function VoiceAgent() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [savedCallId, setSavedCallId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [showTransferBanner, setShowTransferBanner] = useState(false);
   const [showScreenPop, setShowScreenPop] = useState(false);
   const [screenPopData, setScreenPopData] = useState<{
     intent: string; escalationReason: string; aiSummary: string;
@@ -253,7 +272,7 @@ export function VoiceAgent() {
     // Detect escalation and build screen pop data
     if (detectEscalation(currentMessages)) {
       const intent = extractIntent(currentMessages);
-      setScreenPopData({
+      const popData = {
         intent,
         escalationReason: "Caller requested human assistance — transferred to agent queue",
         aiSummary: buildElevenLabsSummary(currentMessages, intent),
@@ -262,8 +281,17 @@ export function VoiceAgent() {
         stepsCompleted: buildStepsCompleted(currentMessages),
         extractedData: buildExtractedData(currentMessages),
         recommendedActions: buildRecommendedActions(currentMessages, intent),
-      });
-      setShowScreenPop(true);
+      };
+      setScreenPopData(popData);
+      setShowTransferBanner(true);
+      setTimeout(() => {
+        setShowScreenPop(true);
+        setTimeout(() => {
+          if (transcriptRef.current) {
+            transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
+          }
+        }, 100);
+      }, 2500);
     }
 
     setIsSaving(true);
@@ -415,6 +443,38 @@ export function VoiceAgent() {
                     </div>
                   </div>
                 )}
+
+                {showTransferBanner && (
+                  <div className="mx-auto w-full max-w-md animate-fade-in">
+                    <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 space-y-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="relative">
+                          <Phone className="h-5 w-5 text-amber-600" />
+                          <div className="absolute inset-0 rounded-full border-2 border-amber-400 animate-ping" style={{ animationDuration: "1.5s" }} />
+                        </div>
+                        <span className="text-sm font-semibold text-amber-800">
+                          {showScreenPop ? "Call Transferred" : "Transferring to Human Agent..."}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-center gap-1.5">
+                        {showScreenPop ? (
+                          <CheckCircle className="h-4 w-4 text-emerald-600" />
+                        ) : (
+                          <>
+                            <div className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                            <div className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                            <div className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                          </>
+                        )}
+                        <span className="text-xs text-amber-700 ml-1">
+                          {showScreenPop
+                            ? "Connected — Agent receiving handoff context below"
+                            : "Packaging conversation context for human agent..."}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {isActive && (
@@ -476,14 +536,16 @@ export function VoiceAgent() {
                     <Badge
                       variant="secondary"
                       className={
-                        isActive
+                        showTransferBanner
+                          ? "bg-amber-100 text-amber-700"
+                          : isActive
                           ? "bg-emerald-100 text-emerald-700"
                           : isConnecting
                           ? "bg-amber-100 text-amber-700"
                           : "bg-gray-100 text-gray-600"
                       }
                     >
-                      {isActive ? "Connected" : isConnecting ? "Connecting..." : "Disconnected"}
+                      {showTransferBanner ? (showScreenPop ? "Transferred" : "Transferring...") : isActive ? "Connected" : isConnecting ? "Connecting..." : "Disconnected"}
                     </Badge>
                   </dd>
                 </div>

@@ -6,12 +6,14 @@ from app.modules.voice.schemas import (
     AuthenticateNPIResponse,
     ClaimsResponse,
     EligibilityResponse,
+    VerifyMemberResponse,
     VerifyZipResponse,
 )
 from app.modules.voice.service import (
     authenticate_npi,
     lookup_claims,
     lookup_eligibility,
+    verify_member,
     verify_zip,
 )
 
@@ -62,6 +64,20 @@ async def api_verify_zip(request: Request):
     data = await _safe_json(request)
     logger.info("verify-zip received: {}", data)
     return await verify_zip(data.get("npi"), data.get("zip_code"))
+
+
+@router.post("/verify-member", response_model=VerifyMemberResponse, summary="Verify member identity")
+async def api_verify_member(request: Request):
+    data = await _safe_json(request)
+    logger.info("verify-member received: {}", data)
+    return await verify_member(
+        caller_type=data.get("caller_type"),
+        patient_name=data.get("patient_name"),
+        patient_dob=data.get("patient_dob"),
+        member_id=data.get("member_id"),
+        ssn_last4=data.get("ssn_last4"),
+        address_zip=data.get("address_zip"),
+    )
 
 
 @router.post("/eligibility", response_model=EligibilityResponse, summary="Look up patient eligibility")

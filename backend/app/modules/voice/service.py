@@ -11,6 +11,7 @@ from app.modules.voice.schemas import (
     AuthenticateNPIResponse,
     ClaimsResponse,
     EligibilityResponse,
+    VerifyMemberResponse,
     VerifyZipResponse,
 )
 
@@ -499,6 +500,123 @@ async def verify_zip(npi: Optional[str] = None, zip_code: Optional[str] = None) 
     return VerifyZipResponse(verified=False)
 
 
+async def verify_member(
+    caller_type: Optional[str] = None,
+    patient_name: Optional[str] = None,
+    patient_dob: Optional[str] = None,
+    member_id: Optional[str] = None,
+    ssn_last4: Optional[str] = None,
+    address_zip: Optional[str] = None,
+) -> VerifyMemberResponse:
+    """Verify a member's identity.
+
+    Provider path (3 factors): patient_name + patient_dob + (member_id | ssn_last4 | address_zip)
+    Member path (1 factor): member_id only
+    """
+    is_member = (caller_type or "").lower() == "member"
+
+    if is_member:
+        if not member_id:
+            return VerifyMemberResponse(
+                verified=False,
+                message="Please provide your member ID to verify your identity.",
+                spoken_summary="I need your member ID to verify your identity. It usually starts with M-B-R followed by a dash and six digits.",
+            )
+        mid = member_id.strip().upper()
+        if not mid.startswith("MBR-"):
+            mid = f"MBR-{_normalize_digits(mid).zfill(6)}"
+        member = await Member.find_one(Member.member_id == mid)
+        if not member:
+            return VerifyMemberResponse(
+                verified=False,
+                message=f"No member found with ID {mid}.",
+                spoken_summary=f"I was unable to find a member with ID {mid}. Please verify and try again.",
+            )
+        return VerifyMemberResponse(
+            verified=True,
+            member_id=member.member_id,
+            patient_name=f"{member.first_name} {member.last_name}",
+            plan_name=member.plan_name,
+            status=member.status,
+            spoken_summary=f"Verified. Welcome, {member.first_name}. You are on the {member.plan_name} plan.",
+        )
+
+    # Provider path: need name + DOB + (member_id or fallback)
+    if not patient_name or not patient_dob:
+        missing = []
+        if not patient_name:
+            missing.append("patient name")
+        if not patient_dob:
+            missing.append("date of birth")
+        return VerifyMemberResponse(
+            verified=False,
+            message=f"Missing {' and '.join(missing)}. All three verification factors are required.",
+            spoken_summary=f"I need the patient's {' and '.join(missing)} to proceed.",
+        )
+
+    has_third_factor = bool(member_id or ssn_last4 or address_zip)
+    if not has_third_factor:
+        return VerifyMemberResponse(
+            verified=False,
+            message="A third verification factor is required: member ID, last 4 of SSN, or zip code on file.",
+            spoken_summary="I also need one more piece of information to verify the patient: their member ID, the last four digits of their Social Security number, or their zip code on file.",
+        )
+
+    dob_normalized = _normalize_dob(patient_dob)
+    members = await _find_members_fuzzy(patient_name, dob_normalized)
+
+    if not members:
+        return VerifyMemberResponse(
+            verified=False,
+            message=f"No patient found matching '{patient_name}' with DOB '{patient_dob}'.",
+            spoken_summary=f"I was unable to find a patient named {patient_name} with that date of birth. Please verify and try again.",
+        )
+
+    # Check third factor against found members
+    for member in members:
+        if member_id:
+            mid = member_id.strip().upper()
+            if not mid.startswith("MBR-"):
+                mid = f"MBR-{_normalize_digits(mid).zfill(6)}"
+            if member.member_id == mid:
+                return VerifyMemberResponse(
+                    verified=True,
+                    member_id=member.member_id,
+                    patient_name=f"{member.first_name} {member.last_name}",
+                    plan_name=member.plan_name,
+                    status=member.status,
+                    spoken_summary=f"Patient verified. {member.first_name} {member.last_name}, member ID {member.member_id}, on the {member.plan_name} plan.",
+                )
+        if ssn_last4:
+            ssn_clean = _normalize_digits(ssn_last4)[-4:]
+            if member.ssn_last4 and member.ssn_last4 == ssn_clean:
+                return VerifyMemberResponse(
+                    verified=True,
+                    member_id=member.member_id,
+                    patient_name=f"{member.first_name} {member.last_name}",
+                    plan_name=member.plan_name,
+                    status=member.status,
+                    spoken_summary=f"Patient verified via SSN. {member.first_name} {member.last_name}, member ID {member.member_id}, on the {member.plan_name} plan.",
+                )
+        if address_zip:
+            zip_clean = _normalize_digits(address_zip)[:5]
+            if member.address_zip and member.address_zip == zip_clean:
+                return VerifyMemberResponse(
+                    verified=True,
+                    member_id=member.member_id,
+                    patient_name=f"{member.first_name} {member.last_name}",
+                    plan_name=member.plan_name,
+                    status=member.status,
+                    spoken_summary=f"Patient verified via zip code. {member.first_name} {member.last_name}, member ID {member.member_id}, on the {member.plan_name} plan.",
+                )
+
+    return VerifyMemberResponse(
+        verified=False,
+        message="Patient name and date of birth matched, but the third verification factor did not match our records.",
+        spoken_summary="I found a patient with that name and date of birth, but the additional verification information didn't match. Could you double-check and try again?",
+    )
+
+
 async def lookup_eligibility(
     npi: Optional[str] = None,
     patient_name: Optional[str] = None,
@@ -595,7 +713,7 @@ def _member_to_eligibility(
 
 
 async def lookup_claims(
-    npi: str,
+    npi: Optional[str] = None,
     claim_number: Optional[str] = None,
     patient_name: Optional[str] = None,
     patient_dob: Optional[str] = None,
@@ -629,6 +747,10 @@ async def lookup_claims(
         if not mid.startswith("MBR"):
             mid = f"MBR-{mid.lstrip('-')}"
         claim_query: dict = {"member_id": mid}
+        if npi:
+            npi_clean = _normalize_digits(npi)
+            if npi_clean:
+                claim_query["provider_npi"] = npi_clean
         if date_of_service:
             dos_normalized = _normalize_dob(date_of_service)
             claim_query["date_of_service"] = dos_normalized or date_of_service.strip()
@@ -638,14 +760,20 @@ async def lookup_claims(
                 claim_query["billed_amount"] = billed_clean
             except (ValueError, TypeError):
                 logger.warning("Could not parse billed_amount: '{}'", billed_amount)
-        logger.info("Claims lookup by member_id='{}' dos='{}' billed='{}'", mid, date_of_service, billed_amount)
+        logger.info("Claims lookup by member_id='{}' npi='{}' dos='{}' billed='{}'", mid, npi, date_of_service, billed_amount)
         claims = await Claim.find(claim_query).sort("-date_of_service").to_list()
         if claims:
             return _claim_to_response(claims[0])
-        # Retry without billed_amount if no exact match (billed amount may be slightly off)
+        # Retry without billed_amount if no exact match
         if billed_amount and date_of_service:
             claim_query_no_billed = {k: v for k, v in claim_query.items() if k != "billed_amount"}
             claims = await Claim.find(claim_query_no_billed).sort("-date_of_service").to_list()
+            if claims:
+                return _claim_to_response(claims[0])
+        # Retry without provider_npi filter (claim may be under a different provider)
+        if npi and (date_of_service or billed_amount):
+            claim_query_no_npi = {k: v for k, v in claim_query.items() if k != "provider_npi"}
+            claims = await Claim.find(claim_query_no_npi).sort("-date_of_service").to_list()
             if claims:
                 return _claim_to_response(claims[0])
         return _finalize_claims_response(ClaimsResponse(

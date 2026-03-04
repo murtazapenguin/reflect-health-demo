@@ -141,6 +141,16 @@ def _merge_tool_result(extracted: Dict, name: str, params: Dict, result: Dict):
         extracted["valid"] = result.get("valid", False)
         extracted["provider_name"] = result.get("provider_name")
         extracted["practice_name"] = result.get("practice_name")
+    elif "verify" in name and "member" in name:
+        extracted["member_verified"] = result.get("verified", False)
+        if result.get("member_id"):
+            extracted["member_id"] = result["member_id"]
+        if result.get("patient_name"):
+            extracted["patient_name"] = result["patient_name"]
+        if result.get("plan_name"):
+            extracted["plan_name"] = result["plan_name"]
+        if params.get("caller_type"):
+            extracted["caller_type"] = params["caller_type"]
     elif "zip" in name or "verify" in name:
         extracted["zip_verified"] = result.get("verified", False)
         if result.get("provider_name"):
@@ -283,7 +293,7 @@ def _split_transcript_by_role(
     for e in transcript_entries:
         speaker = (e.get("speaker") or "").lower()
         text = e.get("text", "")
-        if speaker in ("provider", "user"):
+        if speaker in ("provider", "user", "caller", "member"):
             user_parts.append(text)
         elif speaker in ("ai", "agent", "assistant"):
             agent_parts.append(text)
@@ -300,19 +310,19 @@ def _determine_intent(
         return intent
     # Check user messages first for what they actually asked about
     lower = user_text.lower()
-    if "prior auth" in lower or "authorization" in lower:
+    if "prior auth" in lower or "prior authorization" in lower or "authorization" in lower:
         return "prior_auth"
     if "claim" in lower:
         return "claims"
-    if "eligib" in lower or "coverage" in lower:
+    if "eligib" in lower or "coverage" in lower or "benefit" in lower:
         return "eligibility"
     # Fall back to full transcript (less reliable due to agent greetings)
     full_lower = full_text.lower()
-    if "prior auth" in full_lower or "authorization" in full_lower:
+    if "prior auth" in full_lower or "prior authorization" in full_lower:
         return "prior_auth"
     if "claim" in full_lower:
         return "claims"
-    if "eligib" in full_lower or "coverage" in full_lower:
+    if "eligib" in full_lower or "coverage" in full_lower or "benefit" in full_lower:
         return "eligibility"
     return "general"
 
@@ -338,6 +348,10 @@ def _detect_transfer_reason(
 ) -> Optional[str]:
     user_lower = user_text.lower()
 
+    # Prior auth intent → immediate transfer per policy
+    if "prior auth" in user_lower or "prior authorization" in user_lower:
+        return "Prior authorization request — transferred to Prior Auth Team per policy"
+
     # Check if the USER expressed frustration
     frustration_keywords = [
         "already told you", "this isn't working", "not working", "ridiculous",
@@ -359,6 +373,10 @@ def _detect_transfer_reason(
     agent_lower = agent_text.lower()
     if "wasn't able to validate" in agent_lower or "unable to verify" in agent_lower:
         return "Authentication failed — transferred to human agent"
+
+    # Member couldn't provide member ID
+    if "member id" in agent_lower and ("don't have" in user_lower or "do not have" in user_lower):
+        return "Member unable to provide Member ID — transferred to human agent"
 
     # Generic transfer
     if "connect you with" in agent_lower or "team member" in agent_lower:
@@ -428,7 +446,7 @@ async def save_conversation(body: SaveConversationRequest):
 
     # Use the local transcript from the frontend as the baseline
     transcript_entries = [
-        {"speaker": "AI" if e.speaker == "agent" else "Provider", "text": e.text}
+        {"speaker": "AI" if e.speaker == "agent" else "Caller", "text": e.text}
         for e in body.transcript
     ]
     transcript_text = " ".join(e.text for e in body.transcript)
@@ -478,6 +496,8 @@ async def save_conversation(body: SaveConversationRequest):
         tags.append("auto-resolved")
     elif outcome == "transferred":
         tags.append("escalation")
+        if intent == "prior_auth":
+            tags.append("prior_auth_transfer")
     elif outcome == "not_found":
         tags.append("not-found")
 

@@ -24,6 +24,25 @@ class VerifyZipResponse(BaseModel):
     provider_name: Optional[str] = None
 
 
+class VerifyMemberRequest(BaseModel):
+    caller_type: Optional[str] = None  # "provider" or "member"
+    patient_name: Optional[str] = None
+    patient_dob: Optional[str] = None
+    member_id: Optional[str] = None
+    ssn_last4: Optional[str] = None
+    address_zip: Optional[str] = None
+
+
+class VerifyMemberResponse(BaseModel):
+    verified: bool
+    message: Optional[str] = None
+    spoken_summary: Optional[str] = None
+    member_id: Optional[str] = None
+    patient_name: Optional[str] = None
+    plan_name: Optional[str] = None
+    status: Optional[str] = None
+
+
 class EligibilityRequest(BaseModel):
     npi: Optional[str] = None
     patient_name: Optional[str] = None
