@@ -132,6 +132,12 @@ export function VoiceAgent() {
       const { signed_url } = await api.getElevenLabsSignedUrl();
       const id = await conversation.startSession({
         signedUrl: signed_url,
+        overrides: {
+          agent: {
+            firstMessage:
+              "Thank you for calling Reflect Health, this is an AI assistant. I can help with eligibility verification or claims status. How can I help you today?",
+          },
+        },
       });
       setConversationId(id);
     } catch (err: any) {
@@ -245,8 +251,8 @@ export function VoiceAgent() {
                       Ready to connect
                     </h3>
                     <p className="text-sm text-muted-foreground max-w-sm mb-6">
-                      Start a conversation with the AI healthcare agent. Ask about eligibility,
-                      claims status, or prior authorization — just like calling the phone line.
+                      Start a conversation with the AI healthcare agent. Ask about eligibility
+                      or claims status — just like calling the phone line.
                     </p>
                     <Button
                       onClick={startConversation}
@@ -451,7 +457,7 @@ export function VoiceAgent() {
                 {[
                   "I need to check eligibility for a patient",
                   "Can you look up a claim status?",
-                  "I want to check on a prior authorization",
+                  "What's the copay for a specialist visit?",
                   "I need to verify my provider credentials",
                 ].map((prompt, i) => (
                   <div
