@@ -66,7 +66,9 @@ const DEFAULT_PLATFORM: PlatformParams = {
 
 export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [mode, setMode] = useState<ViewMode>("internal");
-  const [deploymentMode, setDeploymentMode] = useState<DeploymentMode>("white-label");
+  const [deploymentMode, setDeploymentModeRaw] = useState<DeploymentMode>(
+    () => (sessionStorage.getItem("rh_deploymentMode") as DeploymentMode) || "white-label"
+  );
   const [preset, setPresetRaw] = useState<VolumePreset>("medium");
   const [callParams, setCallParams] = useState(DEFAULT_CALL);
   const [claimsParams, setClaimsParams] = useState(DEFAULT_CLAIMS);
@@ -74,10 +76,22 @@ export function DashboardProvider({ children }: { children: React.ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [competitiveIndexOpen, setCompetitiveIndexOpen] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
-  const [activeTab, setActiveTab] = useState<DashboardTab>("contact");
+  const [activeTab, setActiveTabRaw] = useState<DashboardTab>(
+    () => (sessionStorage.getItem("rh_activeTab") as DashboardTab) || "contact"
+  );
   const [isSyncing, setIsSyncing] = useState(false);
   const [realKPIs, setRealKPIs] = useState<KPIs | null>(null);
   const [realTrend, setRealTrend] = useState<KPITrendPoint[]>([]);
+
+  const setActiveTab = useCallback((t: DashboardTab) => {
+    setActiveTabRaw(t);
+    sessionStorage.setItem("rh_activeTab", t);
+  }, []);
+
+  const setDeploymentMode = useCallback((d: DeploymentMode) => {
+    setDeploymentModeRaw(d);
+    sessionStorage.setItem("rh_deploymentMode", d);
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");

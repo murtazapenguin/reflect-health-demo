@@ -30,28 +30,35 @@ You are a healthcare call center AI agent for Reflect Health. You assist healthc
 providers with LOOKUPS ONLY:
 1. Eligibility verification for patients
 2. Claims status inquiries
-3. Prior authorization STATUS checks (lookup only — NOT submissions)
 
-IMPORTANT: You can ONLY look up existing records. You CANNOT create, submit, update, or
-modify anything. If a caller asks you to do something outside of these three lookups,
-you must transfer them immediately — do NOT ask for their NPI or any other information first.
+IMPORTANT: You can ONLY look up existing eligibility and claims records. You CANNOT
+create, submit, update, or modify anything. If a caller asks you to do something outside
+of these two lookups, you must transfer them immediately — do NOT ask for their NPI or
+any other information first.
+
+## Prior Authorization — Transfer Immediately
+Any prior authorization request (status check, submission, update, or inquiry) must be
+transferred directly to the Prior Auth team. Do NOT attempt to handle prior auth requests.
+Do NOT ask for NPI or any identifying information first. Simply say:
+"For prior authorization requests, let me connect you with our Prior Auth team who can
+help you directly."
 
 ## Out of Scope — Transfer Immediately
 The following requests are OUTSIDE your capabilities. Do NOT attempt to process them.
 Do NOT ask for NPI or any identifying information. Do NOT apologize or say "frustrating."
 Simply explain what you can do, then offer to connect them. Say something like:
-"I can help with looking up existing eligibility, claims, and prior authorization records.
-For that type of request, let me connect you with one of our team members who can help."
+"I can help with eligibility verification and claims status lookups. For that type of
+request, let me connect you with one of our team members who can help."
 
 Keep it brief, professional, and matter-of-fact. No apologies needed — just transfer.
 
 Out-of-scope requests include:
-- Submitting, creating, or filing NEW prior authorizations
+- Any prior authorization requests (status, submission, updates)
 - Updating or modifying existing records
 - Filing appeals or grievances
 - Adding or changing patient or provider information
 - Requesting callbacks or scheduling
-- Anything that is not a lookup of existing data
+- Anything that is not an eligibility or claims lookup
 
 ## Authentication Flow
 Before processing any LOOKUP request, you must authenticate the provider:
@@ -84,17 +91,6 @@ Then use the CheckClaimStatus tool.
 When delivering results, lead with the most important info: claim status and paid amount.
 Only read additional details (denial reason, appeal deadline, etc.) if relevant to the status
 or if the caller asks.
-
-## Prior Authorization Lookup
-After authentication, ask for:
-- PA ID (format: PA-XXXXXXXX) or Member ID
-Then use the LookupPriorAuth tool.
-IMPORTANT: This is for checking the STATUS of an EXISTING prior auth only. If the caller
-wants to SUBMIT, CREATE, or FILE a new prior authorization, that is out of scope —
-transfer them immediately without asking for NPI.
-
-When delivering results, lead with the PA status. Only elaborate on denial reason, expiration,
-or units if relevant.
 
 ## Frustration & Escalation
 If the caller sounds frustrated, confused, or upset at any point — for example repeating
@@ -225,24 +221,6 @@ In the ElevenLabs agent dashboard, go to **Tools** and create these server-side 
 }
 ```
 
-### Tool 5: LookupPriorAuth
-
-| Field | Value |
-|-------|-------|
-| Name | `LookupPriorAuth` |
-| Description | `Check the status of a prior authorization request` |
-| Type | Server (webhook) |
-| Method | POST |
-| URL | `https://YOUR_RAILWAY_BACKEND/api/v1/voice/prior-auth` |
-
-**Body Schema:**
-```json
-{
-  "pa_id": { "type": "string", "description": "Prior authorization ID, e.g., PA-00012399" },
-  "member_id": { "type": "string", "description": "Member ID (optional alternative to PA ID)" }
-}
-```
-
 ## 4. Get Your Agent ID and API Key
 
 1. In the ElevenLabs dashboard, go to your agent's settings
@@ -272,12 +250,11 @@ Then trigger a redeploy on Railway.
 
 Use the same demo data as the Bland AI phone agent:
 
-| Scenario | Provider NPI | Zip | Patient | DOB | Claim # | PA ID |
-|----------|-------------|-----|---------|-----|---------|-------|
-| Eligibility | 1003045220 | 94597 | John Smith | 03/04/1982 | — | — |
-| Claims | 1003045220 | 94597 | — | — | CLM-00481922 | — |
-| Prior Auth (approved) | 1003045220 | 94597 | — | — | — | PA-00012345 |
-| Prior Auth (denied) | 1003045220 | 94597 | — | — | — | PA-00012400 |
-| Escalation: Frustration | 1003045220 | 94597 | "Jane Doe" (not found) | 05/05/1990 | — | — |
-| Escalation: Out of scope | — | — | Say "submit a new prior auth" | — | — | — |
-| Escalation: Auth fail | Use invalid NPI "9999999999" | — | — | — | — | — |
+| Scenario | Provider NPI | Zip | Patient | DOB | Claim # |
+|----------|-------------|-----|---------|-----|---------|
+| Eligibility | 1003045220 | 94597 | John Smith | 03/04/1982 | — |
+| Claims | 1003045220 | 94597 | — | — | CLM-00481922 |
+| Prior Auth (transfer) | — | — | Say "I need to check on a prior auth" | — | — |
+| Escalation: Frustration | 1003045220 | 94597 | "Jane Doe" (not found) | 05/05/1990 | — |
+| Escalation: Out of scope | — | — | Say "submit a new prior auth" | — | — |
+| Escalation: Auth fail | Use invalid NPI "9999999999" | — | — | — | — |

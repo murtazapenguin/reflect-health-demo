@@ -47,11 +47,104 @@ function extractMemberId(messages: Message[]): string | undefined {
 }
 
 function buildElevenLabsSummary(messages: Message[], intent: string): string {
-  const providerMsg = messages.find((m) => m.role === "user");
-  if (providerMsg) {
-    return `Provider called regarding ${intent.toLowerCase()}. AI authenticated caller and collected patient information before escalating to a human agent for further assistance.`;
+  const allText = messages.map((m) => m.text).join(" ").toLowerCase();
+  const parts: string[] = [];
+
+  const hasNpiAuth = allText.includes("npi") || allText.includes("provider identifier");
+  const hasZipVerify = allText.includes("zip");
+  const hasPatientLookup = allText.includes("patient") || allText.includes("member") || allText.includes("eligib");
+  const hasClaimLookup = allText.includes("claim");
+  const hasPriorAuth = allText.includes("prior auth");
+
+  if (hasNpiAuth) parts.push("authenticated provider via NPI");
+  if (hasZipVerify) parts.push("verified practice zip code");
+  if (hasPatientLookup) parts.push("collected patient information");
+  if (hasClaimLookup) parts.push("attempted claim lookup");
+  if (hasPriorAuth) parts.push("identified prior auth request");
+
+  if (parts.length > 0) {
+    return `Provider called regarding ${intent.toLowerCase()}. AI ${parts.join(", ")} before transferring to a human agent for further assistance.`;
   }
   return `Caller requested ${intent.toLowerCase()}. AI collected verification details and transferred to the appropriate team.`;
+}
+
+function buildStepsCompleted(messages: Message[]): string[] {
+  const allText = messages.map((m) => m.text).join(" ").toLowerCase();
+  const steps: string[] = [];
+
+  if (allText.includes("npi") || allText.includes("provider identifier")) {
+    if (allText.includes("verified") || allText.includes("dr.") || allText.includes("doctor")) {
+      steps.push("Provider identity verified via NPI lookup");
+    } else {
+      steps.push("NPI provided but verification failed");
+    }
+  }
+  if (allText.includes("zip") && (allText.includes("verified") || allText.includes("confirmed"))) {
+    steps.push("Practice zip code confirmed");
+  }
+  if (allText.includes("eligib") || allText.includes("coverage")) {
+    if (allText.includes("active") || allText.includes("found")) {
+      steps.push("Patient eligibility verified — member active");
+    } else if (allText.includes("not found") || allText.includes("no patient")) {
+      steps.push("Patient lookup attempted — member not found");
+    }
+  }
+  if (allText.includes("claim")) {
+    if (allText.includes("paid") || allText.includes("denied") || allText.includes("pending")) {
+      steps.push("Claim status retrieved");
+    } else {
+      steps.push("Claim lookup attempted");
+    }
+  }
+  if (allText.includes("prior auth")) {
+    steps.push("Prior authorization request identified — requires human handling");
+  }
+
+  return steps;
+}
+
+function buildRecommendedActions(messages: Message[], intent: string): string[] {
+  const allText = messages.map((m) => m.text).join(" ").toLowerCase();
+  const actions: string[] = [];
+
+  if (intent.toLowerCase().includes("prior")) {
+    actions.push("Process prior authorization request for the patient");
+    actions.push("Verify clinical documentation is on file");
+  } else if (allText.includes("not found") || allText.includes("no patient")) {
+    actions.push("Verify patient demographics manually in the system");
+    actions.push("Check alternate spellings or member ID");
+  } else if (allText.includes("frustrat") || allText.includes("ridiculous") || allText.includes("already told")) {
+    actions.push("Acknowledge caller's frustration and de-escalate");
+    actions.push("Complete the original request manually");
+  } else if (allText.includes("invalid") || allText.includes("wasn't able to validate")) {
+    actions.push("Verify caller identity through alternate method");
+    actions.push("Check NPI against provider directory manually");
+  } else {
+    actions.push("Review AI conversation context above and continue from where AI left off");
+    actions.push("Complete caller's original request");
+  }
+
+  return actions;
+}
+
+function buildExtractedData(messages: Message[]): Record<string, string> {
+  const data: Record<string, string> = {};
+
+  for (const m of messages) {
+    const npiMatch = m.text.match(/\b(\d{10})\b/);
+    if (npiMatch && !data["NPI"]) data["NPI"] = npiMatch[1];
+
+    const memberMatch = m.text.match(/\bMBR-\d+/i);
+    if (memberMatch && !data["Member ID"]) data["Member ID"] = memberMatch[0].toUpperCase();
+
+    const claimMatch = m.text.match(/\bCLM-\d+/i);
+    if (claimMatch && !data["Claim #"]) data["Claim #"] = claimMatch[0].toUpperCase();
+
+    const planMatch = m.text.match(/Reflect\s+(Gold|Silver|Platinum)\s+(PPO|HMO)/i);
+    if (planMatch && !data["Plan"]) data["Plan"] = planMatch[0];
+  }
+
+  return data;
 }
 
 interface Message {
@@ -74,6 +167,8 @@ export function VoiceAgent() {
   const [screenPopData, setScreenPopData] = useState<{
     intent: string; escalationReason: string; aiSummary: string;
     providerName?: string; memberId?: string;
+    stepsCompleted?: string[]; extractedData?: Record<string, string>;
+    recommendedActions?: string[];
   } | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<Date | null>(null);
@@ -164,6 +259,9 @@ export function VoiceAgent() {
         aiSummary: buildElevenLabsSummary(currentMessages, intent),
         providerName: extractProviderName(currentMessages),
         memberId: extractMemberId(currentMessages),
+        stepsCompleted: buildStepsCompleted(currentMessages),
+        extractedData: buildExtractedData(currentMessages),
+        recommendedActions: buildRecommendedActions(currentMessages, intent),
       });
       setShowScreenPop(true);
     }
@@ -509,6 +607,9 @@ export function VoiceAgent() {
             providerName={screenPopData.providerName}
             memberId={screenPopData.memberId}
             callerType="Provider"
+            stepsCompleted={screenPopData.stepsCompleted}
+            extractedData={screenPopData.extractedData}
+            recommendedActions={screenPopData.recommendedActions}
           />
         </div>
       )}

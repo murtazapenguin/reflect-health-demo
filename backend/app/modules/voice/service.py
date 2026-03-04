@@ -138,6 +138,112 @@ SERVICE_ALIASES = {
     "rx": "prescription_generic",
 }
 
+def _spoken_dollars(amount) -> str:
+    """Format a dollar amount for spoken delivery."""
+    if amount is None:
+        return "zero dollars"
+    amount = float(amount)
+    if amount == 0:
+        return "zero dollars"
+    if amount == int(amount):
+        return f"{int(amount)} dollars"
+    return f"{amount:.2f} dollars"
+
+
+def _spoken_date(date_str: str) -> str:
+    """Format YYYY-MM-DD to a spoken date like 'January 1st, 2025'."""
+    if not date_str:
+        return ""
+    import re as _re
+    m = _re.match(r"^(\d{4})-(\d{2})-(\d{2})$", date_str)
+    if not m:
+        return date_str
+    year, month, day = int(m.group(1)), int(m.group(2)), int(m.group(3))
+    month_names = ["", "January", "February", "March", "April", "May", "June",
+                   "July", "August", "September", "October", "November", "December"]
+    day_suffix = "th"
+    if day % 10 == 1 and day != 11:
+        day_suffix = "st"
+    elif day % 10 == 2 and day != 12:
+        day_suffix = "nd"
+    elif day % 10 == 3 and day != 13:
+        day_suffix = "rd"
+    if 1 <= month <= 12:
+        return f"{month_names[month]} {day}{day_suffix}, {year}"
+    return date_str
+
+
+def _build_eligibility_spoken_summary(resp) -> str:
+    """Build a natural-language summary for eligibility results."""
+    if not resp.found:
+        return resp.message or "Patient not found in our system."
+
+    name = resp.patient_name or "The patient"
+
+    if resp.service_type and resp.service_covered is not None:
+        if resp.service_covered:
+            parts = [f"{name} is active on the {resp.plan_name} plan. {resp.service_type} is covered."]
+            if resp.service_copay:
+                parts.append(f"The copay is {_spoken_dollars(resp.service_copay)}.")
+            if resp.service_coinsurance:
+                parts.append(f"Coinsurance is {resp.service_coinsurance} percent.")
+            if resp.service_prior_auth:
+                parts.append("Prior authorization is required.")
+            if resp.service_visit_limit:
+                parts.append(f"Visit limit: {resp.service_visit_limit}.")
+            return " ".join(parts)
+        else:
+            return f"{name} is on the {resp.plan_name} plan, but {resp.service_type} is not covered under this plan."
+
+    parts = [f"{name} is {resp.status} on the {resp.plan_name} plan."]
+    if resp.status in ("termed", "inactive"):
+        if resp.term_date:
+            parts.append(f"Coverage ended {_spoken_date(resp.term_date)}.")
+        return " ".join(parts)
+
+    if resp.copay_primary is not None:
+        parts.append(f"Primary care copay is {_spoken_dollars(resp.copay_primary)}.")
+    if resp.copay_specialist is not None:
+        parts.append(f"Specialist copay is {_spoken_dollars(resp.copay_specialist)}.")
+    if resp.deductible is not None and resp.deductible_met is not None:
+        parts.append(f"Deductible is {_spoken_dollars(resp.deductible)}, with {_spoken_dollars(resp.deductible_met)} met so far.")
+    if resp.out_of_pocket_max is not None and resp.out_of_pocket_met is not None:
+        parts.append(f"Out-of-pocket maximum is {_spoken_dollars(resp.out_of_pocket_max)}, with {_spoken_dollars(resp.out_of_pocket_met)} met.")
+
+    return " ".join(parts)
+
+
+def _build_claims_spoken_summary(resp) -> str:
+    """Build a natural-language summary for claims results."""
+    if not resp.found:
+        return resp.message or "No claim found matching the provided information."
+
+    parts = [f"Claim {resp.claim_number} for {resp.procedure_desc or 'this service'}"]
+
+    if resp.status == "paid":
+        parts.append(f"has been paid.")
+        if resp.paid_amount is not None:
+            parts.append(f"Amount paid: {_spoken_dollars(resp.paid_amount)}.")
+        if resp.patient_responsibility is not None and resp.patient_responsibility > 0:
+            parts.append(f"Patient responsibility: {_spoken_dollars(resp.patient_responsibility)}.")
+        if resp.check_number:
+            parts.append(f"Check number {resp.check_number}.")
+    elif resp.status == "denied":
+        parts.append("was denied.")
+        if resp.denial_reason:
+            parts.append(f"Reason: {resp.denial_reason}.")
+        if resp.appeal_deadline:
+            parts.append(f"The appeal deadline is {_spoken_date(resp.appeal_deadline)}.")
+    elif resp.status == "pending":
+        parts.append("is currently pending processing.")
+        if resp.received_date:
+            parts.append(f"It was received on {_spoken_date(resp.received_date)}.")
+    else:
+        parts.append(f"has a status of {resp.status}.")
+
+    return " ".join(parts)
+
+
 SERVICE_DISPLAY_NAMES = {
     "primary_care": "Primary Care Visit",
     "specialist_visit": "Specialist Visit",
@@ -402,29 +508,35 @@ async def lookup_eligibility(
 ) -> EligibilityResponse:
     if not patient_name and not member_id:
         logger.info("Eligibility lookup missing patient_name and member_id")
-        return EligibilityResponse(
+        resp = EligibilityResponse(
             found=False,
             message="Missing patient name and member ID. Please provide at least one.",
         )
+        resp.spoken_summary = resp.message
+        return resp
     if member_id:
         member = await Member.find_one(Member.member_id == member_id.strip().upper())
         if member:
             return _member_to_eligibility(member, service_type)
-        return EligibilityResponse(
+        resp = EligibilityResponse(
             found=False,
             message=f"No member found with ID {member_id}.",
         )
+        resp.spoken_summary = f"I was unable to find a member with ID {member_id}. Please verify the member ID and try again."
+        return resp
 
     members = await _find_members_fuzzy(patient_name, patient_dob)
 
     if len(members) == 0:
         logger.info("Eligibility lookup failed: {} / {}", patient_name, patient_dob)
-        return EligibilityResponse(
-            found=False,
-            message=f"No patient found matching name '{patient_name}'"
-            + (f" and DOB '{patient_dob}'" if patient_dob else "")
-            + ". Please verify spelling and try again.",
-        )
+        msg = (f"No patient found matching name '{patient_name}'"
+               + (f" and DOB '{patient_dob}'" if patient_dob else "")
+               + ". Please verify spelling and try again.")
+        resp = EligibilityResponse(found=False, message=msg)
+        resp.spoken_summary = (f"I was unable to find a patient named {patient_name}"
+                               + (f" with date of birth {_spoken_date(patient_dob) if patient_dob else ''}" if patient_dob else "")
+                               + ". Please verify the information and try again.")
+        return resp
 
     if len(members) == 1:
         return _member_to_eligibility(members[0], service_type)
@@ -478,6 +590,7 @@ def _member_to_eligibility(
             resp.service_covered = None
             resp.message = f"Could not identify the service '{service_type}'. Please try a more specific term."
 
+    resp.spoken_summary = _build_eligibility_spoken_summary(resp)
     return resp
 
 
@@ -504,11 +617,11 @@ async def lookup_claims(
             if claim:
                 return _claim_to_response(claim)
 
-        return ClaimsResponse(
+        return _finalize_claims_response(ClaimsResponse(
             found=False,
             message=f"No claim found with number '{claim_number}' (searched as '{claim_clean}'). "
             "Please verify the claim number and try again.",
-        )
+        ))
 
     # Direct member_id lookup (preferred — provided by PHI verification step)
     if member_id:
@@ -535,25 +648,25 @@ async def lookup_claims(
             claims = await Claim.find(claim_query_no_billed).sort("-date_of_service").to_list()
             if claims:
                 return _claim_to_response(claims[0])
-        return ClaimsResponse(
+        return _finalize_claims_response(ClaimsResponse(
             found=False,
             message=f"Patient found (member ID {mid}), but no claims on file"
             + (f" for date of service '{date_of_service}'" if date_of_service else "")
             + (f" with billed amount '{billed_amount}'" if billed_amount else "")
             + ".",
-        )
+        ))
 
     if patient_name:
         logger.info("Claims patient lookup: name='{}' dob='{}'", patient_name, patient_dob)
         members = await _find_members_fuzzy(patient_name, patient_dob)
         logger.info("Claims member search found {} members: {}", len(members), [m.member_id for m in members])
         if not members:
-            return ClaimsResponse(
+            return _finalize_claims_response(ClaimsResponse(
                 found=False,
                 message=f"No patient found matching name '{patient_name}'"
                 + (f" and DOB '{patient_dob}'" if patient_dob else "")
                 + ". Please verify the patient information.",
-            )
+            ))
         member_ids = [m.member_id for m in members]
         claim_query = {"member_id": {"$in": member_ids}}
         if date_of_service:
@@ -571,22 +684,29 @@ async def lookup_claims(
             return _claim_to_response(claims[0])
 
         matched_name = f"{members[0].first_name} {members[0].last_name}"
-        return ClaimsResponse(
+        return _finalize_claims_response(ClaimsResponse(
             found=False,
             message=f"Patient '{matched_name}' found, but no claims on file"
             + (f" for date of service '{date_of_service}'" if date_of_service else "")
             + ".",
-        )
+        ))
 
     logger.info("Claims lookup failed: claim={} member_id={} name={} dos={}", claim_number, member_id, patient_name, date_of_service)
-    return ClaimsResponse(
+    return _finalize_claims_response(ClaimsResponse(
         found=False,
         message="No claim number, member ID, or patient name provided. Please provide at least one.",
-    )
+    ))
+
+
+def _finalize_claims_response(resp: ClaimsResponse) -> ClaimsResponse:
+    """Ensure spoken_summary is populated on all claims responses."""
+    if not resp.spoken_summary:
+        resp.spoken_summary = _build_claims_spoken_summary(resp)
+    return resp
 
 
 def _claim_to_response(claim: Claim) -> ClaimsResponse:
-    return ClaimsResponse(
+    resp = ClaimsResponse(
         found=True,
         claim_number=claim.claim_number,
         status=claim.status,
@@ -604,5 +724,7 @@ def _claim_to_response(claim: Claim) -> ClaimsResponse:
         denial_reason=claim.denial_reason,
         appeal_deadline=claim.appeal_deadline,
     )
+    resp.spoken_summary = _build_claims_spoken_summary(resp)
+    return resp
 
 

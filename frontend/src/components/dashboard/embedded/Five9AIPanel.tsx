@@ -3,6 +3,7 @@ import { useSimulation } from "@/contexts/SimulationContext";
 import { useDashboard } from "@/contexts/DashboardContext";
 import { useAudioEngine, type Five9Phase } from "@/contexts/AudioEngineContext";
 import { DetailModal } from "../DetailModal";
+import { Five9ScreenPop } from "./Five9ScreenPop";
 import penguinAiLogo from "@/assets/penguin-ai-logo.png";
 import penguinLogo from "@/assets/penguin-logo.png";
 import {
@@ -414,17 +415,42 @@ export function Five9AIPanel() {
         </button>
       )}
 
-      {/* Escalation banner */}
+      {/* Escalation banner + Screen Pop */}
       {isEscalated && (activeStageIdx >= 5 || phase === "escalation") && (
-        <div className="five9-card p-2.5 border-amber-500/30 bg-amber-50 space-y-1 animate-fade-in">
-          <div className="flex items-center gap-1.5 text-[10px] font-semibold text-amber-700 animate-pulse">
-            <AlertCircle className="h-3 w-3" />
-            Escalation Detected
+        <>
+          <div className="five9-card p-2.5 border-amber-500/30 bg-amber-50 space-y-1 animate-fade-in">
+            <div className="flex items-center gap-1.5 text-[10px] font-semibold text-amber-700 animate-pulse">
+              <AlertCircle className="h-3 w-3" />
+              Escalation Detected
+            </div>
+            <p className="text-[10px] text-amber-600">
+              {session?.escalationReason || "Confidence Below Threshold"}. Routing to Senior Agent. Full context + transcript transferred.
+            </p>
           </div>
-          <p className="text-[10px] text-amber-600">
-            {session?.escalationReason || "Confidence Below Threshold"}. Routing to Senior Agent. Full context + transcript transferred.
-          </p>
-        </div>
+          <Five9ScreenPop
+            intent={displayIntent || "General Inquiry"}
+            escalationReason={session?.escalationReason || "Confidence below threshold — escalated to senior agent"}
+            aiSummary={`AI processed ${displayIntent?.toLowerCase() || "general"} request. Provider ${session?.providerVerified ? "verified" : "not verified"}. ${session?.memberVerified ? "Member identity confirmed." : "Member verification incomplete."} Escalation triggered — full context transferred.`}
+            providerName={session?.providerVerified ? `NPI ${session.providerNpi}` : undefined}
+            providerNpi={session?.providerNpi}
+            memberId={session?.memberId}
+            callerType={session?.callerType === "Member" ? "Member" : "Provider"}
+            sessionId={session?.sessionId}
+            stepsCompleted={[
+              ...(session?.providerVerified ? ["Provider identity verified via NPI"] : ["Provider verification attempted"]),
+              ...(session?.memberVerified ? ["Member identity confirmed (DOB match)"] : []),
+              ...(isIntentClassified ? [`Intent classified: ${displayIntent}`] : []),
+              ...(hasResponse ? ["Data retrieval completed"] : []),
+            ]}
+            recommendedActions={[
+              "Review AI-generated response and context above",
+              session?.escalationReason?.toLowerCase().includes("frustrat")
+                ? "Acknowledge caller frustration and de-escalate before proceeding"
+                : "Continue with caller's original request",
+              "Complete resolution and document outcome",
+            ]}
+          />
+        </>
       )}
 
       {/* ── COMPLIANCE ── */}

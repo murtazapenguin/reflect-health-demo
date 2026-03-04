@@ -35,6 +35,7 @@ class EligibilityRequest(BaseModel):
 class EligibilityResponse(BaseModel):
     found: bool
     message: Optional[str] = None
+    spoken_summary: Optional[str] = None
     status: Optional[str] = None
     member_id: Optional[str] = None
     patient_name: Optional[str] = None
@@ -70,6 +71,7 @@ class ClaimsRequest(BaseModel):
 class ClaimsResponse(BaseModel):
     found: bool
     message: Optional[str] = None
+    spoken_summary: Optional[str] = None
     claim_number: Optional[str] = None
     status: Optional[str] = None
     date_of_service: Optional[str] = None

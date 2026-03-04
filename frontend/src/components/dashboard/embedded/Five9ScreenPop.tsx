@@ -1,6 +1,5 @@
-import { CheckCircle2, AlertTriangle, Phone, User, Shield } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Phone, User, Shield, ClipboardList, ArrowRight } from "lucide-react";
 
-// Department routing table
 const DEPARTMENT_ROUTING: Record<string, { name: string; phone: string }> = {
   eligibility: { name: "Eligibility Team", phone: "(800) 555-3454" },
   claims: { name: "Claims Team", phone: "(800) 555-2572" },
@@ -34,6 +33,9 @@ export interface Five9ScreenPopProps {
   aiSummary: string;
   callerType?: "Provider" | "Member";
   sessionId?: string;
+  stepsCompleted?: string[];
+  extractedData?: Record<string, string>;
+  recommendedActions?: string[];
 }
 
 export function Five9ScreenPop({
@@ -48,9 +50,15 @@ export function Five9ScreenPop({
   aiSummary,
   callerType = "Provider",
   sessionId,
+  stepsCompleted,
+  extractedData,
+  recommendedActions,
 }: Five9ScreenPopProps) {
   const dept = intentToDepartment(intent);
   const displaySessionId = sessionId ?? `F9-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  const hasExtractedData = extractedData && Object.keys(extractedData).length > 0;
+  const hasSteps = stepsCompleted && stepsCompleted.length > 0;
+  const hasActions = recommendedActions && recommendedActions.length > 0;
 
   return (
     <div className="rounded-lg border border-amber-500/40 bg-[#1a1f2e] overflow-hidden text-sm">
@@ -65,7 +73,6 @@ export function Five9ScreenPop({
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-five9-muted font-mono">{displaySessionId}</span>
           <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-[#1e3a5f] border border-blue-500/30">
-            {/* Simple Five9 text logo if image fails */}
             <span className="text-[10px] font-bold text-blue-300">Five9</span>
             <span className="text-[9px] text-blue-400/70">Agent Desktop</span>
           </div>
@@ -150,8 +157,45 @@ export function Five9ScreenPop({
         <p className="text-[11px] text-foreground/80 leading-relaxed">{aiSummary}</p>
       </div>
 
+      {/* What Was Attempted */}
+      {hasSteps && (
+        <div className="mx-3 mb-2 p-2 rounded-md bg-[#0d1a2d] border border-blue-500/20">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <ClipboardList className="h-3 w-3 text-blue-400" />
+            <span className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider">
+              What AI Completed
+            </span>
+          </div>
+          <div className="space-y-1">
+            {stepsCompleted!.map((step, i) => (
+              <div key={i} className="flex items-start gap-1.5">
+                <CheckCircle2 className="h-3 w-3 text-emerald-400 shrink-0 mt-0.5" />
+                <span className="text-[10px] text-foreground/80 leading-relaxed">{step}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Key Data Points */}
+      {hasExtractedData && (
+        <div className="mx-3 mb-2 p-2 rounded-md bg-[#0d1a2d] border border-blue-500/20">
+          <span className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider block mb-1.5">
+            Key Data
+          </span>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+            {Object.entries(extractedData!).map(([key, value]) => (
+              <div key={key} className="flex justify-between text-[10px]">
+                <span className="text-five9-muted">{key}</span>
+                <span className="font-mono text-foreground font-medium">{value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Escalation reason */}
-      <div className="mx-3 mb-3 flex items-start gap-2 px-2 py-1.5 rounded-md bg-amber-950/40 border border-amber-500/30">
+      <div className="mx-3 mb-2 flex items-start gap-2 px-2 py-1.5 rounded-md bg-amber-950/40 border border-amber-500/30">
         <AlertTriangle className="h-3 w-3 text-amber-400 shrink-0 mt-0.5" />
         <div>
           <span className="text-[10px] font-semibold text-amber-400 uppercase tracking-wider">
@@ -160,6 +204,26 @@ export function Five9ScreenPop({
           <p className="text-[11px] text-amber-200/80 mt-0.5">{escalationReason || "Transferred to human agent"}</p>
         </div>
       </div>
+
+      {/* Recommended Next Steps */}
+      {hasActions && (
+        <div className="mx-3 mb-2 p-2 rounded-md bg-emerald-950/30 border border-emerald-500/20">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <ArrowRight className="h-3 w-3 text-emerald-400" />
+            <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">
+              Recommended Next Steps
+            </span>
+          </div>
+          <div className="space-y-1">
+            {recommendedActions!.map((action, i) => (
+              <div key={i} className="flex items-start gap-1.5">
+                <span className="text-[10px] text-emerald-400 font-mono shrink-0">{i + 1}.</span>
+                <span className="text-[10px] text-foreground/80 leading-relaxed">{action}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="px-3 py-1.5 bg-[#0f1420] border-t border-white/5 text-center">

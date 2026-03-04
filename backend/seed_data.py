@@ -24,6 +24,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from app.models.call_record import CallRecord
 from app.models.claim import Claim
 from app.models.member import Member
+from app.models.prior_auth import PriorAuth
 from app.models.provider import Provider
 from app.models.user import User
 
@@ -324,6 +325,23 @@ CLAIMS = [
     {"claim_number": "CLM-00485700", "member_id": "MBR-001253", "provider_npi": "8901234567", "date_of_service": "2025-11-12", "procedure_code": "95819", "procedure_desc": "Electroencephalogram (EEG)", "status": "paid", "billed_amount": 1650.00, "allowed_amount": 1400.00, "paid_amount": 1370.00, "patient_responsibility": 30.00, "check_number": "CHK-0019200", "process_date": "2025-11-30", "received_date": "2025-11-13", "denial_code": None, "denial_reason": None, "appeal_deadline": None},
 ]
 
+# ---------- PRIOR AUTHORIZATIONS ----------
+
+PRIOR_AUTHS = [
+    {"pa_id": "PA-00012345", "member_id": "MBR-001234", "provider_npi": "1003045220", "service_description": "MRI Lumbar Spine without contrast", "procedure_code": "72148", "status": "approved", "urgency": "routine", "submitted_date": "2025-11-01", "decision_date": "2025-11-04", "expiration_date": "2026-05-04", "approved_units": "1", "denial_reason": None, "notes": "Approved per clinical guidelines"},
+    {"pa_id": "PA-00012346", "member_id": "MBR-001235", "provider_npi": "1003045683", "service_description": "Physical Therapy - 20 sessions", "procedure_code": "97110", "status": "approved", "urgency": "routine", "submitted_date": "2025-10-15", "decision_date": "2025-10-18", "expiration_date": "2026-04-18", "approved_units": "20 sessions", "denial_reason": None, "notes": "Post-surgical rehabilitation"},
+    {"pa_id": "PA-00012347", "member_id": "MBR-001236", "provider_npi": "1003045683", "service_description": "Outpatient Knee Arthroscopy", "procedure_code": "29881", "status": "pending_review", "urgency": "routine", "submitted_date": "2026-01-20", "decision_date": None, "expiration_date": None, "approved_units": None, "denial_reason": None, "notes": "Awaiting clinical documentation from provider"},
+    {"pa_id": "PA-00012348", "member_id": "MBR-001237", "provider_npi": "1003044728", "service_description": "Inpatient Admission - Palliative Care", "procedure_code": "99223", "status": "approved", "urgency": "urgent", "submitted_date": "2025-11-18", "decision_date": "2025-11-18", "expiration_date": "2026-02-18", "approved_units": "7 days", "denial_reason": None, "notes": "Urgent approval granted same day"},
+    {"pa_id": "PA-00012349", "member_id": "MBR-001238", "provider_npi": "1003044728", "service_description": "CT Scan Abdomen with contrast", "procedure_code": "74177", "status": "denied", "urgency": "routine", "submitted_date": "2026-01-28", "decision_date": "2026-02-02", "expiration_date": None, "approved_units": None, "denial_reason": "Medical necessity not established — conservative treatment not attempted", "notes": None},
+    {"pa_id": "PA-00012350", "member_id": "MBR-001242", "provider_npi": "1003000126", "service_description": "Inpatient Hospital Stay - Observation", "procedure_code": "99220", "status": "approved", "urgency": "urgent", "submitted_date": "2025-10-16", "decision_date": "2025-10-16", "expiration_date": "2026-01-16", "approved_units": "3 days", "denial_reason": None, "notes": "Concurrent review approved"},
+    {"pa_id": "PA-00012351", "member_id": "MBR-001241", "provider_npi": "5678901234", "service_description": "Mohs Micrographic Surgery", "procedure_code": "17311", "status": "approved", "urgency": "routine", "submitted_date": "2025-11-05", "decision_date": "2025-11-08", "expiration_date": "2026-05-08", "approved_units": "1", "denial_reason": None, "notes": "Biopsy-confirmed BCC, Mohs appropriate"},
+    {"pa_id": "PA-00012352", "member_id": "MBR-001244", "provider_npi": "8901234567", "service_description": "MRI Brain with and without contrast", "procedure_code": "70553", "status": "in_review", "urgency": "routine", "submitted_date": "2026-02-10", "decision_date": None, "expiration_date": None, "approved_units": None, "denial_reason": None, "notes": "Peer-to-peer review requested"},
+    {"pa_id": "PA-00012353", "member_id": "MBR-001245", "provider_npi": "9012345678", "service_description": "Hysterectomy - Laparoscopic", "procedure_code": "58571", "status": "approved", "urgency": "routine", "submitted_date": "2025-09-20", "decision_date": "2025-09-25", "expiration_date": "2026-03-25", "approved_units": "1", "denial_reason": None, "notes": None},
+    {"pa_id": "PA-00012354", "member_id": "MBR-001247", "provider_npi": "3456789012", "service_description": "Cardiac Catheterization", "procedure_code": "93458", "status": "expired", "urgency": "routine", "submitted_date": "2025-06-01", "decision_date": "2025-06-05", "expiration_date": "2025-12-05", "approved_units": "1", "denial_reason": None, "notes": "Authorization expired — procedure not performed within window"},
+    {"pa_id": "PA-00012400", "member_id": "MBR-001243", "provider_npi": "7890123456", "service_description": "Specialist Referral - Pediatric Cardiology", "procedure_code": "99245", "status": "denied", "urgency": "routine", "submitted_date": "2025-12-01", "decision_date": "2025-12-05", "expiration_date": None, "approved_units": None, "denial_reason": "Out-of-network provider — in-network alternative available within 15 miles", "notes": "Member may appeal with medical justification"},
+    {"pa_id": "PA-00012401", "member_id": "MBR-001248", "provider_npi": "4567890123", "service_description": "Total Knee Replacement", "procedure_code": "27447", "status": "approved", "urgency": "routine", "submitted_date": "2025-10-01", "decision_date": "2025-10-05", "expiration_date": "2026-04-05", "approved_units": "1", "denial_reason": None, "notes": "Pre-surgical clearance confirmed"},
+]
+
 # ---------- HISTORICAL CALL RECORDS ----------
 
 SAMPLE_TRANSCRIPTS = {
@@ -494,7 +512,7 @@ async def seed():
 
     await init_beanie(
         database=db,
-        document_models=[User, Provider, Member, Claim, CallRecord],
+        document_models=[User, Provider, Member, Claim, PriorAuth, CallRecord],
     )
 
     # Clear existing data
@@ -503,6 +521,7 @@ async def seed():
     await Provider.delete_all()
     await Member.delete_all()
     await Claim.delete_all()
+    await PriorAuth.delete_all()
     await CallRecord.delete_all()
 
     # Seed admin user
@@ -531,6 +550,11 @@ async def seed():
     for c in CLAIMS:
         await Claim(**c).insert()
 
+    # Seed prior auths
+    print(f"Seeding {len(PRIOR_AUTHS)} prior authorizations...")
+    for pa in PRIOR_AUTHS:
+        await PriorAuth(**pa).insert()
+
     # Seed call records
     call_records_data = _generate_call_records(50)
     print(f"Seeding {len(call_records_data)} call records...")
@@ -542,6 +566,7 @@ async def seed():
     print(f"  Providers: {await Provider.count()}")
     print(f"  Members: {await Member.count()}")
     print(f"  Claims: {await Claim.count()}")
+    print(f"  Prior Auths: {await PriorAuth.count()}")
     print(f"  Call Records: {await CallRecord.count()}")
     print(f"\nDemo credentials: admin@reflecthealth.com / demo2026")
 

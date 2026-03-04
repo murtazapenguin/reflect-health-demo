@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useCallDetail, useUpdateTags, useUpdateFlag } from "@/hooks/use-api";
+import { useLogout } from "@/hooks/use-logout";
 import { format } from "date-fns";
 import {
   ArrowLeft, Flag, Phone, Clock, User, ShieldCheck, X, Plus, LogOut,
-  Mic, PhoneForwarded, AlertTriangle,
+  Mic, PhoneForwarded, AlertTriangle, CheckCircle2, ClipboardList, ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -38,6 +39,12 @@ const BOOL_KEYS = new Set(["found", "valid", "verified", "zip_verified", "servic
 const DOLLAR_KEYS = new Set(["service_copay", "copay_primary", "copay_specialist", "deductible", "deductible_met", "out_of_pocket_max", "out_of_pocket_met", "billed_amount", "allowed_amount", "paid_amount", "patient_responsibility"]);
 const PA_STATUS_MAP: Record<string, string> = { approved: "Approved", denied: "Denied", pending_review: "Pending Review", in_review: "In Review", expired: "Expired" };
 
+const AUTH_KEYS = new Set(["npi", "valid", "verified", "zip_verified", "zip_code", "provider_name", "practice_name"]);
+const PATIENT_KEYS = new Set(["patient_name", "patient_dob", "member_id", "plan_name", "status", "effective_date", "term_date", "cob_status"]);
+const FINANCIAL_KEYS = new Set(["copay_primary", "copay_specialist", "deductible", "deductible_met", "out_of_pocket_max", "out_of_pocket_met", "service_copay", "service_coinsurance"]);
+const CLAIM_KEYS = new Set(["claim_number", "claim_status", "billed_amount", "allowed_amount", "paid_amount", "patient_responsibility", "check_number", "process_date", "received_date", "denial_code", "denial_reason", "appeal_deadline"]);
+const SERVICE_KEYS = new Set(["service_type", "service_covered", "service_prior_auth", "service_visit_limit", "service_notes"]);
+
 function formatValue(key: string, val: unknown): string {
   const s = String(val);
   if (key === "found") return s === "true" ? "Found" : "Not Found";
@@ -64,6 +71,72 @@ function valueColor(key: string, val: unknown): string {
   return "text-foreground";
 }
 
+function groupExtractedData(data: Record<string, unknown>) {
+  const groups: { title: string; icon: React.ReactNode; entries: [string, unknown][] }[] = [];
+  const remaining: [string, unknown][] = [];
+
+  const authEntries = Object.entries(data).filter(([k]) => AUTH_KEYS.has(k));
+  const patientEntries = Object.entries(data).filter(([k]) => PATIENT_KEYS.has(k));
+  const financialEntries = Object.entries(data).filter(([k]) => FINANCIAL_KEYS.has(k));
+  const claimEntries = Object.entries(data).filter(([k]) => CLAIM_KEYS.has(k));
+  const serviceEntries = Object.entries(data).filter(([k]) => SERVICE_KEYS.has(k));
+
+  const categorized = new Set([...AUTH_KEYS, ...PATIENT_KEYS, ...FINANCIAL_KEYS, ...CLAIM_KEYS, ...SERVICE_KEYS, "message", "call_intent", "found", "call_successful"]);
+  Object.entries(data).filter(([k]) => !categorized.has(k)).forEach(e => remaining.push(e));
+
+  if (authEntries.length > 0) groups.push({ title: "Authentication", icon: <ShieldCheck className="h-3 w-3" />, entries: authEntries });
+  if (patientEntries.length > 0) groups.push({ title: "Patient Info", icon: <User className="h-3 w-3" />, entries: patientEntries });
+  if (serviceEntries.length > 0) groups.push({ title: "Service Details", icon: <ClipboardList className="h-3 w-3" />, entries: serviceEntries });
+  if (financialEntries.length > 0) groups.push({ title: "Financials", icon: <Clock className="h-3 w-3" />, entries: financialEntries });
+  if (claimEntries.length > 0) groups.push({ title: "Claim Details", icon: <Phone className="h-3 w-3" />, entries: claimEntries });
+  if (remaining.length > 0) groups.push({ title: "Other", icon: <ArrowRight className="h-3 w-3" />, entries: remaining });
+
+  return groups;
+}
+
+function buildHandoffSummary(call: { intent: string; outcome: string; auth_success: boolean | null; transferred: boolean; transfer_reason: string | null; extracted_data: Record<string, unknown>; transcript: { speaker: string; text: string }[] }) {
+  const steps: string[] = [];
+  const data = call.extracted_data || {};
+
+  if (data.valid === true || data.valid === "true") {
+    steps.push(`Provider verified — NPI ${data.npi || "confirmed"}`);
+  } else if (data.npi) {
+    steps.push(`NPI ${data.npi} provided — verification ${data.valid === false || data.valid === "false" ? "failed" : "attempted"}`);
+  }
+  if (data.verified === true || data.verified === "true" || data.zip_verified === true || data.zip_verified === "true") {
+    steps.push("Practice zip code confirmed");
+  }
+  if (data.found === true || data.found === "true") {
+    if (call.intent === "eligibility") steps.push(`Patient found — ${data.status || "eligibility verified"}`);
+    else if (call.intent === "claims") steps.push(`Claim located — status: ${data.claim_status || data.status || "retrieved"}`);
+    else steps.push("Lookup completed successfully");
+  } else if (data.found === false || data.found === "false") {
+    steps.push(data.message ? String(data.message) : "Lookup attempted — record not found");
+  }
+
+  const actions: string[] = [];
+  if (call.transfer_reason?.toLowerCase().includes("frustrat")) {
+    actions.push("Acknowledge caller's frustration and de-escalate");
+    actions.push("Complete the original request manually");
+  } else if (call.transfer_reason?.toLowerCase().includes("auth")) {
+    actions.push("Verify caller identity through alternate method");
+    actions.push("Complete the original request once identity is confirmed");
+  } else if (call.intent === "prior_auth") {
+    actions.push("Process prior authorization request");
+    actions.push("Verify clinical documentation is on file");
+  } else if (data.found === false || data.found === "false") {
+    actions.push("Verify patient demographics manually");
+    actions.push("Check alternate spellings or member ID");
+  } else {
+    actions.push("Review AI conversation context and continue from where AI left off");
+    actions.push("Complete caller's original request");
+  }
+
+  return { steps, actions };
+}
+
+const TRANSFER_KEYWORDS = ["transfer", "connect you", "let me connect", "team member", "human agent", "representative"];
+
 export default function CallDetailPage() {
   const { callId } = useParams<{ callId: string }>();
   const navigate = useNavigate();
@@ -71,6 +144,7 @@ export default function CallDetailPage() {
   const tagsMutation = useUpdateTags(callId!);
   const flagMutation = useUpdateFlag(callId!);
   const [newTag, setNewTag] = useState("");
+  const handleLogout = useLogout();
 
   const handleToggleFlag = () => {
     if (!call) return;
@@ -87,12 +161,6 @@ export default function CallDetailPage() {
   const handleRemoveTag = (tag: string) => {
     if (!call) return;
     tagsMutation.mutate(call.tags.filter((t) => t !== tag));
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("user");
-    navigate("/login");
   };
 
   const fmtDate = (d?: string) => d ? format(new Date(d), "MMM d, yyyy h:mm:ss a") : "—";
@@ -116,6 +184,8 @@ export default function CallDetailPage() {
 
   const data = call.extracted_data || {};
   const lookupFailed = data.found === "false" || data.found === false;
+  const groups = groupExtractedData(data);
+  const handoff = call.transferred ? buildHandoffSummary(call) : null;
 
   return (
     <div className="min-h-screen bg-background">
@@ -204,6 +274,64 @@ export default function CallDetailPage() {
           </CardContent></Card>
         </div>
 
+        {/* Transfer Handoff Summary */}
+        {call.transferred && handoff && (
+          <Card className="border-amber-300 bg-gradient-to-r from-amber-50/50 to-orange-50/30">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-amber-800 flex items-center gap-2">
+                <PhoneForwarded className="h-4 w-4" />
+                Agent Handoff Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* What AI completed */}
+                <div>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <ClipboardList className="h-3.5 w-3.5 text-amber-700" />
+                    <span className="text-xs font-semibold text-amber-800 uppercase tracking-wider">What AI Completed</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {handoff.steps.length > 0 ? handoff.steps.map((step, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <CheckCircle2 className="h-3.5 w-3.5 text-amber-600 shrink-0 mt-0.5" />
+                        <span className="text-xs text-amber-900">{step}</span>
+                      </div>
+                    )) : (
+                      <p className="text-xs text-amber-700 italic">AI transferred before completing any lookups</p>
+                    )}
+                  </div>
+                  {call.transfer_reason && (
+                    <div className="mt-3 flex items-start gap-2 p-2 rounded-md bg-amber-100/60 border border-amber-200">
+                      <AlertTriangle className="h-3.5 w-3.5 text-amber-700 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="text-[10px] font-semibold text-amber-800 uppercase">Transfer Reason</span>
+                        <p className="text-xs text-amber-800 mt-0.5">{call.transfer_reason}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Recommended next steps */}
+                <div>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <ArrowRight className="h-3.5 w-3.5 text-amber-700" />
+                    <span className="text-xs font-semibold text-amber-800 uppercase tracking-wider">Recommended Next Steps</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {handoff.actions.map((action, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="text-xs font-mono text-amber-600 shrink-0">{i + 1}.</span>
+                        <span className="text-xs text-amber-900">{action}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Main content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Transcript */}
@@ -214,18 +342,28 @@ export default function CallDetailPage() {
                 <div className="max-h-[500px] overflow-y-auto space-y-3">
                   {call.transcript.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-6">No transcript available</p>
-                  ) : call.transcript.map((entry, idx) => (
-                    <div key={idx} className={`flex ${entry.speaker === "AI" ? "justify-start" : "justify-end"}`}>
-                      <div className={`max-w-[80%] rounded-xl px-4 py-2.5 ${
-                        entry.speaker === "AI" ? "bg-primary/5 border border-primary/15" : "bg-secondary border border-border"
-                      }`}>
-                        <p className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${
-                          entry.speaker === "AI" ? "reflect-gradient-text" : "text-muted-foreground"
-                        }`}>{entry.speaker}</p>
-                        <p className="text-sm text-foreground leading-relaxed">{entry.text}</p>
+                  ) : call.transcript.map((entry, idx) => {
+                    const isTransferMsg = entry.speaker === "AI" && TRANSFER_KEYWORDS.some(k => entry.text.toLowerCase().includes(k));
+                    return (
+                      <div key={idx} className={`flex ${entry.speaker === "AI" ? "justify-start" : "justify-end"}`}>
+                        <div className={`max-w-[80%] rounded-xl px-4 py-2.5 ${
+                          isTransferMsg
+                            ? "bg-amber-50 border-2 border-amber-300"
+                            : entry.speaker === "AI"
+                              ? "bg-primary/5 border border-primary/15"
+                              : "bg-secondary border border-border"
+                        }`}>
+                          <p className={`text-[10px] font-bold uppercase tracking-wider mb-1 ${
+                            entry.speaker === "AI" ? "reflect-gradient-text" : "text-muted-foreground"
+                          }`}>
+                            {entry.speaker}
+                            {isTransferMsg && <span className="ml-2 text-amber-600 normal-case font-semibold">Transfer</span>}
+                          </p>
+                          <p className="text-sm text-foreground leading-relaxed">{entry.text}</p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -262,28 +400,37 @@ export default function CallDetailPage() {
               </CardContent>
             </Card>
 
-            {Object.keys(data).length > 0 && (
+            {/* Grouped Extracted Data */}
+            {groups.length > 0 && (
               <Card>
                 <CardHeader className="pb-2"><CardTitle className="text-sm">Extracted Data</CardTitle></CardHeader>
-                <CardContent>
+                <CardContent className="space-y-3">
                   {lookupFailed && (
-                    <div className="mb-3 p-2.5 rounded-lg bg-amber-50 border border-amber-200">
+                    <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200">
                       <p className="text-xs font-semibold text-amber-800 mb-0.5">
                         {data.claim_number ? "Claim Not Found" : data.patient_name ? "Patient Not Found" : "Lookup Failed"}
                       </p>
                       {data.message && <p className="text-[11px] text-amber-700 leading-relaxed">{String(data.message)}</p>}
                     </div>
                   )}
-                  <dl className="space-y-2">
-                    {Object.entries(data).filter(([key]) => key !== "message").map(([key, value]) => (
-                      <div key={key} className="flex justify-between">
-                        <dt className="type-micro text-muted-foreground">{LABEL_MAP[key] || key}</dt>
-                        <dd className={`text-xs font-medium text-right max-w-[60%] truncate ${valueColor(key, value)}`} title={String(value)}>
-                          {formatValue(key, value)}
-                        </dd>
+                  {groups.map((group) => (
+                    <div key={group.title}>
+                      <div className="flex items-center gap-1.5 mb-1.5">
+                        <span className="text-muted-foreground">{group.icon}</span>
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{group.title}</span>
                       </div>
-                    ))}
-                  </dl>
+                      <dl className="space-y-1.5 pl-1">
+                        {group.entries.map(([key, value]) => (
+                          <div key={key} className="flex justify-between">
+                            <dt className="type-micro text-muted-foreground">{LABEL_MAP[key] || key}</dt>
+                            <dd className={`text-xs font-medium text-right max-w-[60%] truncate ${valueColor(key, value)}`} title={String(value)}>
+                              {formatValue(key, value)}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
             )}

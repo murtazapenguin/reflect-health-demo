@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useDashboard, type DashboardTab, type DeploymentMode } from "@/contexts/DashboardContext";
+import { useDashboard, type DashboardTab } from "@/contexts/DashboardContext";
+import { useLogout } from "@/hooks/use-logout";
 import { SlidersHorizontal, Shield, RefreshCw, Phone, FileText, Globe, TrendingUp, Play, Monitor, Plug, Info, Brain, List, LogOut, Mic, PhoneForwarded } from "lucide-react";
 import { type VolumePreset } from "@/lib/roi-calculations";
 import { ScenarioSelector } from "./ScenarioSelector";
@@ -42,12 +43,7 @@ export function Header({ metricsOpen, onToggleMetrics }: { metricsOpen?: boolean
   const [comparisonOpen, setComparisonOpen] = useState(false);
   const [playbackOpen, setPlaybackOpen] = useState(false);
   const navigate = useNavigate();
-
-  const handleLogout = () => {
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("user");
-    navigate("/login");
-  };
+  const handleLogout = useLogout();
 
   return (
     <header className="border-b border-border bg-card/90 backdrop-blur-sm">

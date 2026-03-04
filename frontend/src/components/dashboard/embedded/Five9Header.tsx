@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Circle, ChevronDown, Monitor, Download } from "lucide-react";
 import { useDashboard } from "@/contexts/DashboardContext";
-import { useAudioEngine } from "@/contexts/AudioEngineContext";
 import { ExportSummary } from "../ExportSummary";
 import penguinLogo from "@/assets/penguin-icon.png";
 import type { Five9Tab } from "./Five9Layout";
@@ -11,7 +10,7 @@ interface Five9HeaderProps {
   setActiveTab: (t: Five9Tab) => void;
 }
 
-export function Five9Header({ activeTab, setActiveTab }: Five9HeaderProps) { // audio-engine-fix
+export function Five9Header({ activeTab, setActiveTab }: Five9HeaderProps) {
   const { setDeploymentMode } = useDashboard();
   
   const [elapsed, setElapsed] = useState(0);

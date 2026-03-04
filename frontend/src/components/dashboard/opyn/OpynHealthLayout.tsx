@@ -6,7 +6,7 @@ import penguinLogo from "@/assets/penguin-logo-pink.png";
 import { MemberBenefitAssistant } from "./MemberBenefitAssistant";
 import { CostTransparencyPanel } from "./CostTransparencyPanel";
 import { ProviderPortalView } from "./ProviderPortalView";
-import { useOpynSimulation, type SimPhase } from "./useOpynSimulation";
+import { useOpynSimulation } from "./useOpynSimulation";
 
 type OpynMode = "member" | "provider";
 
