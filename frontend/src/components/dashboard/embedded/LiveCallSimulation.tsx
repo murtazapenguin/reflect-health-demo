@@ -5,6 +5,7 @@ import { useDashboard } from "@/contexts/DashboardContext";
 import type { Five9Phase, Five9ApiCall, Five9SessionData, EdgeCaseType } from "@/contexts/AudioEngineContext";
 import { User, AlertTriangle, CheckCircle2, Mic, MicOff, Timer } from "lucide-react";
 import { AudioControlPanel } from "./AudioControlPanel";
+import { Five9ScreenPop } from "./Five9ScreenPop";
 import penguinLogo from "@/assets/penguin-logo.png";
 
 const CALLER_VOICE = "EXAVITQu4vr4xnSDxMaL";
@@ -445,6 +446,24 @@ function pickTemplate(npi: string, provName: string, memberId: string, dob: stri
   }
 }
 
+function buildAiSummary(intent: string, edgeCase: EdgeCaseType, session: Five9SessionData | null): string {
+  const provider = session?.providerName ?? "the provider";
+  const patient = session?.memberId ? `member ${session.memberId}` : "the patient";
+  if (edgeCase === "wrong_npi") return `${provider} called but could not be verified — NPI did not match CMS records after retry.`;
+  if (edgeCase === "invalid_member_id") return `${provider} called regarding ${patient}, but member ID could not be verified after retry.`;
+  if (edgeCase === "dob_mismatch") return `${provider} called regarding ${patient}, but date of birth did not match records after retry.`;
+  if (edgeCase === "claim_not_found") return `${provider} called to check a claim for ${patient}, but the claim could not be located in the system.`;
+  if (edgeCase === "api_timeout") return `${provider} called regarding ${patient}, but a system timeout prevented data retrieval.`;
+  const lower = intent.toLowerCase();
+  if (lower.includes("eligib") || lower.includes("benefit") || lower.includes("coverage"))
+    return `${provider} called to verify eligibility for ${patient}. AI authenticated provider and patient, then retrieved active coverage details.`;
+  if (lower.includes("claim"))
+    return `${provider} called to check claim status for ${patient}. AI authenticated both parties and retrieved adjudication status.`;
+  if (lower.includes("prior") || lower.includes("auth"))
+    return `${provider} called regarding a prior authorization for ${patient}. Prior auth inquiries are routed directly to the PA team.`;
+  return `${provider} called regarding ${patient}. AI authenticated both parties and attempted to resolve the inquiry.`;
+}
+
 type CallStatus = "idle" | "incoming" | "processing" | "resolved" | "escalated";
 
 interface TranscriptLine {
@@ -460,7 +479,7 @@ export function LiveCallSimulation() {
   const {
     audioEnabled, setAudioEnabled, isLiveSimulation, setIsLiveSimulation,
     confidenceThreshold, playTTS, stopAudio, setCurrentCallOutcome,
-    isPlaying, setLiveCallIntent, setFive9Phase, setFive9Session,
+    isPlaying, setLiveCallIntent, setFive9Phase, setFive9Session, five9Session,
   } = useAudioEngine();
 
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
@@ -720,7 +739,20 @@ export function LiveCallSimulation() {
         </div>
       )}
 
-      {callStatus === "escalated" && (
+      {callStatus === "escalated" && five9Session && (
+        <Five9ScreenPop
+          providerName={five9Session.providerName}
+          providerNpi={five9Session.providerNpi}
+          memberId={five9Session.memberId}
+          memberDob={five9Session.memberDob}
+          intent={five9Session.intent}
+          escalationReason={five9Session.escalationReason || `Confidence ${callConfidence}% below threshold`}
+          aiSummary={buildAiSummary(five9Session.intent, five9Session.edgeCaseType, five9Session)}
+          callerType={five9Session.callerType}
+          sessionId={five9Session.sessionId}
+        />
+      )}
+      {callStatus === "escalated" && !five9Session && (
         <div className="rounded p-2 flex items-center gap-2 type-body font-medium bg-amber-500/10 border border-amber-500/20 text-amber-700">
           <AlertTriangle className="h-3.5 w-3.5" />
           Escalated to Agent — Confidence {callConfidence}% &lt; {confidenceThreshold}%

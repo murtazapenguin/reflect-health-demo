@@ -12,6 +12,47 @@ import { Slider } from "@/components/ui/slider";
 import { api } from "@/lib/api";
 import penguinLogo from "@/assets/penguin-ai-logo.png";
 import { DemoDataReference } from "./DemoDataReference";
+import { Five9ScreenPop } from "./embedded/Five9ScreenPop";
+
+const TRANSFER_PHRASES = ["transfer", "connect you with", "team member", "human agent", "representative", "specialist"];
+
+function detectEscalation(messages: Message[]): boolean {
+  return messages.some(
+    (m) => m.role === "agent" && TRANSFER_PHRASES.some((p) => m.text.toLowerCase().includes(p))
+  );
+}
+
+function extractIntent(messages: Message[]): string {
+  const allText = messages.map((m) => m.text).join(" ").toLowerCase();
+  if (allText.includes("eligib") || allText.includes("coverage") || allText.includes("benefit")) return "Eligibility Verification";
+  if (allText.includes("claim") || allText.includes("status") || allText.includes("paid") || allText.includes("denied")) return "Claim Status";
+  if (allText.includes("prior auth") || allText.includes("authorization")) return "Prior Authorization";
+  return "General Inquiry";
+}
+
+function extractProviderName(messages: Message[]): string | undefined {
+  for (const m of messages) {
+    const match = m.text.match(/(?:Dr\.\s+\w+(?:\s+\w+)?|I'?m\s+(?:calling\s+from\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+))/);
+    if (match) return match[0];
+  }
+  return undefined;
+}
+
+function extractMemberId(messages: Message[]): string | undefined {
+  for (const m of messages) {
+    const match = m.text.match(/\bMBR-\d+\b/i);
+    if (match) return match[0].toUpperCase();
+  }
+  return undefined;
+}
+
+function buildElevenLabsSummary(messages: Message[], intent: string): string {
+  const providerMsg = messages.find((m) => m.role === "user");
+  if (providerMsg) {
+    return `Provider called regarding ${intent.toLowerCase()}. AI authenticated caller and collected patient information before escalating to a human agent for further assistance.`;
+  }
+  return `Caller requested ${intent.toLowerCase()}. AI collected verification details and transferred to the appropriate team.`;
+}
 
 interface Message {
   role: "user" | "agent";
@@ -29,6 +70,11 @@ export function VoiceAgent() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [savedCallId, setSavedCallId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [showScreenPop, setShowScreenPop] = useState(false);
+  const [screenPopData, setScreenPopData] = useState<{
+    intent: string; escalationReason: string; aiSummary: string;
+    providerName?: string; memberId?: string;
+  } | null>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<Date | null>(null);
   const navigate = useNavigate();
@@ -79,6 +125,8 @@ export function VoiceAgent() {
     setIsConnecting(true);
     setError(null);
     setMessages([]);
+    setShowScreenPop(false);
+    setScreenPopData(null);
 
     try {
       const { signed_url } = await api.getElevenLabsSignedUrl();
@@ -106,6 +154,19 @@ export function VoiceAgent() {
     const convId = conversationId;
 
     if (currentMessages.length === 0) return;
+
+    // Detect escalation and build screen pop data
+    if (detectEscalation(currentMessages)) {
+      const intent = extractIntent(currentMessages);
+      setScreenPopData({
+        intent,
+        escalationReason: "Caller requested human assistance — transferred to agent queue",
+        aiSummary: buildElevenLabsSummary(currentMessages, intent),
+        providerName: extractProviderName(currentMessages),
+        memberId: extractMemberId(currentMessages),
+      });
+      setShowScreenPop(true);
+    }
 
     setIsSaving(true);
     const duration = startTimeRef.current
@@ -431,6 +492,26 @@ export function VoiceAgent() {
       </div>
 
       <DemoDataReference />
+
+      {showScreenPop && screenPopData && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-2">
+              Five9 Agent Desktop — What the Agent Sees
+            </span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+          <Five9ScreenPop
+            intent={screenPopData.intent}
+            escalationReason={screenPopData.escalationReason}
+            aiSummary={screenPopData.aiSummary}
+            providerName={screenPopData.providerName}
+            memberId={screenPopData.memberId}
+            callerType="Provider"
+          />
+        </div>
+      )}
     </div>
   );
 }
