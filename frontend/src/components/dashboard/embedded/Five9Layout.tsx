@@ -10,9 +10,10 @@ import { Five9SupervisorView } from "./Five9SupervisorView";
 import { Five9EmailView } from "./Five9EmailView";
 import { Five9ChatView } from "./Five9ChatView";
 import { Five9HistoryView } from "./Five9HistoryView";
+import { VoiceAgent } from "../VoiceAgent";
 
 export type Five9Tab = "agent" | "supervisor";
-export type Five9SidebarTab = "calls" | "email" | "chat" | "history" | "supervisor";
+export type Five9SidebarTab = "calls" | "email" | "chat" | "history" | "supervisor" | "voiceAgent";
 
 export function Five9Layout() {
   const [activeTab, setActiveTab] = useState<Five9Tab>("agent");
@@ -39,6 +40,12 @@ export function Five9Layout() {
         return <Five9ChatView />;
       case "history":
         return <Five9HistoryView />;
+      case "voiceAgent":
+        return (
+          <div className="h-full overflow-y-auto">
+            <VoiceAgent />
+          </div>
+        );
       default:
         return (
           <div className="grid grid-cols-12 gap-0 h-full">
