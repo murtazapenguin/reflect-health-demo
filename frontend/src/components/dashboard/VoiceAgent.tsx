@@ -23,10 +23,15 @@ function detectEscalation(messages: Message[]): boolean {
 }
 
 function extractIntent(messages: Message[]): string {
-  const allText = messages.map((m) => m.text).join(" ").toLowerCase();
-  if (allText.includes("eligib") || allText.includes("coverage") || allText.includes("benefit")) return "Eligibility Verification";
-  if (allText.includes("claim") || allText.includes("status") || allText.includes("paid") || allText.includes("denied")) return "Claim Status";
-  if (allText.includes("prior auth") || allText.includes("authorization")) return "Prior Authorization";
+  const userText = messages.filter((m) => m.role === "user").map((m) => m.text).join(" ").toLowerCase();
+  if (userText.includes("prior auth") || userText.includes("authorization")) return "Prior Authorization";
+  if (userText.includes("eligib") || userText.includes("coverage") || userText.includes("benefit")) return "Eligibility Verification";
+  if (userText.includes("claim") || userText.includes("paid") || userText.includes("denied")) return "Claim Status";
+  // Fall back to agent messages only for action-confirming keywords (not the greeting)
+  const agentText = messages.filter((m) => m.role === "agent").map((m) => m.text).join(" ").toLowerCase();
+  if (agentText.includes("prior auth") && !agentText.includes("i can help with")) return "Prior Authorization";
+  if (agentText.includes("coverage is") || agentText.includes("plan name") || agentText.includes("deductible")) return "Eligibility Verification";
+  if ((agentText.includes("claim") && (agentText.includes("paid") || agentText.includes("denied") || agentText.includes("pending")))) return "Claim Status";
   return "General Inquiry";
 }
 
@@ -47,65 +52,76 @@ function extractMemberId(messages: Message[]): string | undefined {
 }
 
 function buildElevenLabsSummary(messages: Message[], intent: string): string {
-  const allText = messages.map((m) => m.text).join(" ").toLowerCase();
+  const userText = messages.filter((m) => m.role === "user").map((m) => m.text).join(" ").toLowerCase();
+  const agentText = messages.filter((m) => m.role === "agent").map((m) => m.text).join(" ").toLowerCase();
   const parts: string[] = [];
 
-  const hasNpiAuth = allText.includes("npi") || allText.includes("provider identifier");
-  const hasZipVerify = allText.includes("zip");
-  const hasPatientLookup = allText.includes("patient") || allText.includes("member") || allText.includes("eligib");
-  const hasClaimLookup = allText.includes("claim");
-  const hasPriorAuth = allText.includes("prior auth");
+  // Check user messages for what they provided
+  const userProvidedNpi = userText.match(/\b\d{10}\b/) !== null;
+  const userMentionedZip = userText.match(/\b\d{5}\b/) !== null;
+  const userMentionedMember = userText.includes("mbr-") || userText.includes("member");
+  const userAskedPriorAuth = userText.includes("prior auth") || userText.includes("authorization");
 
-  if (hasNpiAuth) parts.push("authenticated provider via NPI");
-  if (hasZipVerify) parts.push("verified practice zip code");
-  if (hasPatientLookup) parts.push("collected patient information");
-  if (hasClaimLookup) parts.push("attempted claim lookup");
-  if (hasPriorAuth) parts.push("identified prior auth request");
+  // Check agent messages for confirmed actions (not the greeting)
+  const agentVerifiedNpi = agentText.includes("verified") && agentText.includes("npi");
+  const agentVerifiedZip = agentText.includes("zip") && (agentText.includes("verified") || agentText.includes("confirmed"));
+  const agentDidEligibility = agentText.includes("coverage is") || agentText.includes("plan name") || agentText.includes("deductible");
+  const agentDidClaim = agentText.includes("claim") && (agentText.includes("paid") || agentText.includes("denied") || agentText.includes("pending"));
+
+  if (userProvidedNpi || agentVerifiedNpi) parts.push("authenticated provider via NPI");
+  if (userMentionedZip || agentVerifiedZip) parts.push("verified practice zip code");
+  if (userMentionedMember) parts.push("collected patient/member information");
+  if (agentDidEligibility) parts.push("completed eligibility lookup");
+  if (agentDidClaim) parts.push("completed claim status lookup");
+  if (userAskedPriorAuth) parts.push("identified prior authorization request");
+
+  const callerType = userText.includes("provider") ? "Provider" : userText.includes("member") ? "Member" : "Caller";
 
   if (parts.length > 0) {
-    return `Provider called regarding ${intent.toLowerCase()}. AI ${parts.join(", ")} before transferring to a human agent for further assistance.`;
+    return `${callerType} called regarding ${intent.toLowerCase()}. AI ${parts.join(", ")} before transferring to a human agent for further assistance.`;
   }
-  return `Caller requested ${intent.toLowerCase()}. AI collected verification details and transferred to the appropriate team.`;
+  return `${callerType} requested ${intent.toLowerCase()}. Transferred to the appropriate team.`;
 }
 
 function buildStepsCompleted(messages: Message[]): string[] {
-  const allText = messages.map((m) => m.text).join(" ").toLowerCase();
+  const userText = messages.filter((m) => m.role === "user").map((m) => m.text).join(" ").toLowerCase();
+  const agentText = messages.filter((m) => m.role === "agent").map((m) => m.text).join(" ").toLowerCase();
   const steps: string[] = [];
 
-  if (allText.includes("npi") || allText.includes("provider identifier")) {
-    if (allText.includes("verified") || allText.includes("dr.") || allText.includes("doctor")) {
+  // NPI: user provided a 10-digit number, or agent confirmed verification
+  if (userText.match(/\b\d{10}\b/) || (agentText.includes("npi") && agentText.includes("verified"))) {
+    if (agentText.includes("verified") || agentText.includes("dr.") || agentText.includes("doctor")) {
       steps.push("Provider identity verified via NPI lookup");
     } else {
       steps.push("NPI provided — verification attempted");
     }
   }
-  if (allText.includes("zip")) {
-    if (allText.includes("verified") || allText.includes("confirmed")) {
+  // Zip: user provided a 5-digit number and agent confirmed
+  if (userText.match(/\b\d{5}\b/) && agentText.includes("zip")) {
+    if (agentText.includes("verified") || agentText.includes("confirmed")) {
       steps.push("Practice zip code confirmed");
     } else {
       steps.push("Zip code verification attempted");
     }
   }
-  if (allText.includes("member id") || allText.includes("mbr-") || allText.includes("patient name") || allText.includes("date of birth")) {
-    steps.push("Patient PHI collected for identity verification");
+  // PHI: user mentioned member ID, name, or DOB
+  if (userText.includes("mbr-") || (agentText.includes("member") && agentText.includes("verified"))) {
+    steps.push("Patient PHI collected and verified");
   }
-  if (allText.includes("eligib") || allText.includes("coverage")) {
-    if (allText.includes("active") || allText.includes("found")) {
+  // Eligibility: only if agent actually delivered results (not just mentioned it in greeting)
+  if (agentText.includes("coverage is") || agentText.includes("plan name") || agentText.includes("deductible is")) {
+    if (agentText.includes("active") || agentText.includes("found")) {
       steps.push("Patient eligibility verified — member active");
-    } else if (allText.includes("not found") || allText.includes("no patient")) {
+    } else if (agentText.includes("not found") || agentText.includes("no patient")) {
       steps.push("Patient lookup attempted — member not found");
-    } else {
-      steps.push("Eligibility inquiry initiated");
     }
   }
-  if (allText.includes("claim")) {
-    if (allText.includes("paid") || allText.includes("denied") || allText.includes("pending")) {
-      steps.push("Claim status retrieved");
-    } else {
-      steps.push("Claim lookup attempted");
-    }
+  // Claims: only if agent delivered claim results
+  if (agentText.includes("claim") && (agentText.includes("paid") || agentText.includes("denied") || agentText.includes("pending"))) {
+    steps.push("Claim status retrieved");
   }
-  if (allText.includes("prior auth")) {
+  // Prior auth: based on user request, not agent greeting
+  if (userText.includes("prior auth") || userText.includes("authorization")) {
     steps.push("Prior authorization request identified — requires human handling");
   }
 

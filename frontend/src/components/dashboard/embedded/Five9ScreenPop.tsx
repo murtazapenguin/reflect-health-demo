@@ -1,4 +1,4 @@
-import { CheckCircle2, AlertTriangle, Phone, Shield, ClipboardList, ArrowRight, UserCheck } from "lucide-react";
+import { CheckCircle2, AlertTriangle, Phone, Shield, ClipboardList, ArrowRight, UserCheck, MinusCircle } from "lucide-react";
 
 const DEPARTMENT_ROUTING: Record<string, { name: string; phone: string }> = {
   eligibility: { name: "Eligibility Team", phone: "(800) 555-3454" },
@@ -105,6 +105,8 @@ export function Five9ScreenPop({
   const dept = intentToDepartment(intent);
   const displaySessionId = sessionId ?? `F9-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
   const fallbackKey = getFallbackKey(intent);
+  const hasCallerIdentity = !!(providerName || providerNpi || (callerType === "Member" && (patientName || memberId)));
+  const hasPhiData = !!(patientName || memberId || memberDob || planName);
 
   const steps = stepsCompleted && stepsCompleted.length > 0
     ? stepsCompleted
@@ -156,57 +158,78 @@ export function Five9ScreenPop({
 
       <div className="p-4 grid grid-cols-2 gap-3">
         {/* Caller Verified */}
-        <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200">
-          <div className="flex items-center gap-2 mb-2">
-            <UserCheck className="h-4 w-4 text-emerald-600 shrink-0" />
-            <span className="text-[12px] font-bold text-emerald-700 uppercase tracking-wider">
-              {callerType === "Member" ? "Member" : "Provider"} Verified
-            </span>
-          </div>
-          {callerType === "Provider" ? (
-            <>
-              <div className="text-[14px] font-semibold text-gray-900">
-                {providerName || "Provider (name pending)"}
-              </div>
-              {providerNpi && (
-                <div className="text-[12px] text-gray-500 font-mono mt-1">
-                  NPI: {providerNpi}
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="text-[14px] font-semibold text-gray-900">
-              {patientName || "Member (name pending)"}
+        {hasCallerIdentity ? (
+          <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200">
+            <div className="flex items-center gap-2 mb-2">
+              <UserCheck className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span className="text-[12px] font-bold text-emerald-700 uppercase tracking-wider">
+                {callerType === "Member" ? "Member" : "Provider"} Verified
+              </span>
             </div>
-          )}
-        </div>
+            {callerType === "Provider" ? (
+              <>
+                <div className="text-[14px] font-semibold text-gray-900">
+                  {providerName || "Provider"}
+                </div>
+                {providerNpi && (
+                  <div className="text-[12px] text-gray-500 font-mono mt-1">
+                    NPI: {providerNpi}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-[14px] font-semibold text-gray-900">
+                {patientName || "Member"}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="p-4 rounded-lg bg-gray-50 border border-gray-200">
+            <div className="flex items-center gap-2 mb-2">
+              <MinusCircle className="h-4 w-4 text-gray-400 shrink-0" />
+              <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">
+                Caller Identity
+              </span>
+            </div>
+            <div className="text-[13px] text-gray-400 italic">N/A — Immediate transfer</div>
+          </div>
+        )}
 
         {/* Patient / PHI Verified */}
-        <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200">
-          <div className="flex items-center gap-2 mb-2">
-            <Shield className="h-4 w-4 text-emerald-600 shrink-0" />
-            <span className="text-[12px] font-bold text-emerald-700 uppercase tracking-wider">
-              PHI Verified
-            </span>
+        {hasPhiData ? (
+          <div className="p-4 rounded-lg bg-emerald-50 border border-emerald-200">
+            <div className="flex items-center gap-2 mb-2">
+              <Shield className="h-4 w-4 text-emerald-600 shrink-0" />
+              <span className="text-[12px] font-bold text-emerald-700 uppercase tracking-wider">
+                PHI Verified
+              </span>
+            </div>
+            {patientName && (
+              <div className="text-[14px] font-semibold text-gray-900">{patientName}</div>
+            )}
+            <div className="space-y-1 mt-1">
+              {memberId && (
+                <div className="text-[12px] text-gray-600 font-mono">{memberId}</div>
+              )}
+              {memberDob && (
+                <div className="text-[12px] text-gray-600">DOB: {memberDob}</div>
+              )}
+              {planName && (
+                <div className="text-[12px] text-gray-600">{planName}</div>
+              )}
+            </div>
           </div>
-          {patientName && (
-            <div className="text-[14px] font-semibold text-gray-900">{patientName}</div>
-          )}
-          <div className="space-y-1 mt-1">
-            {memberId && (
-              <div className="text-[12px] text-gray-600 font-mono">{memberId}</div>
-            )}
-            {memberDob && (
-              <div className="text-[12px] text-gray-600">DOB: {memberDob}</div>
-            )}
-            {planName && (
-              <div className="text-[12px] text-gray-600">{planName}</div>
-            )}
-            {!patientName && !memberId && (
-              <div className="text-[13px] text-gray-400 italic">PHI not yet collected</div>
-            )}
+        ) : (
+          <div className="p-4 rounded-lg bg-gray-50 border border-gray-200">
+            <div className="flex items-center gap-2 mb-2">
+              <MinusCircle className="h-4 w-4 text-gray-400 shrink-0" />
+              <span className="text-[12px] font-bold text-gray-400 uppercase tracking-wider">
+                PHI Verification
+              </span>
+            </div>
+            <div className="text-[13px] text-gray-400 italic">N/A — Immediate transfer</div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* AI Summary */}
