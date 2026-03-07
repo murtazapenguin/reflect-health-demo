@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, QAReviewInput } from "@/lib/api";
 
 export function useKPIs() {
   return useQuery({
@@ -50,5 +50,40 @@ export function useUpdateFlag(callId: string) {
       qc.invalidateQueries({ queryKey: ["call", callId] });
       qc.invalidateQueries({ queryKey: ["calls"] });
     },
+  });
+}
+
+export function useCallReviews(callId: string | undefined) {
+  return useQuery({
+    queryKey: ["callReviews", callId],
+    queryFn: () => api.getCallReviews(callId!),
+    enabled: !!callId,
+  });
+}
+
+export function useSubmitReview(callId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: QAReviewInput) => api.submitQAReview(callId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["callReviews", callId] });
+      qc.invalidateQueries({ queryKey: ["accuracyKPIs"] });
+    },
+  });
+}
+
+export function useAccuracyKPIs() {
+  return useQuery({
+    queryKey: ["accuracyKPIs"],
+    queryFn: () => api.getAccuracyKPIs(),
+    refetchInterval: 60_000,
+  });
+}
+
+export function useCallerContext(memberId: string | undefined) {
+  return useQuery({
+    queryKey: ["callerContext", memberId],
+    queryFn: () => api.getCallerContext(memberId!),
+    enabled: !!memberId,
   });
 }

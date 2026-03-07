@@ -4,18 +4,24 @@ from fastapi import APIRouter, Query
 
 from app.common.exceptions import NotFoundException
 from app.modules.dashboard.schemas import (
+    AccuracyKPIResponse,
     CallDetail,
     CallLogResponse,
     FlagUpdateRequest,
     KPIMetrics,
     KPITrendPoint,
+    QAReviewRequest,
+    QAReviewResponse,
     TagUpdateRequest,
 )
 from app.modules.dashboard.service import (
+    create_qa_review,
+    get_accuracy_kpis,
     get_call_detail,
     get_call_log,
     get_kpi_metrics,
     get_kpi_trend,
+    get_reviews_for_call,
     update_call_flag,
     update_call_tags,
 )
@@ -78,3 +84,28 @@ async def api_update_flag(call_id: str, body: FlagUpdateRequest):
     if not detail:
         raise NotFoundException(f"Call {call_id} not found")
     return detail
+
+
+@router.post("/calls/{call_id}/review", response_model=QAReviewResponse, summary="Submit QA review")
+async def api_submit_review(call_id: str, body: QAReviewRequest):
+    detail = await get_call_detail(call_id)
+    if not detail:
+        raise NotFoundException(f"Call {call_id} not found")
+    return await create_qa_review(
+        call_id=call_id,
+        reviewer=body.reviewer,
+        review_score=body.review_score,
+        categories=body.categories,
+        notes=body.notes,
+        status=body.status,
+    )
+
+
+@router.get("/calls/{call_id}/reviews", response_model=List[QAReviewResponse], summary="Get reviews for a call")
+async def api_get_reviews(call_id: str):
+    return await get_reviews_for_call(call_id)
+
+
+@router.get("/kpis/accuracy", response_model=AccuracyKPIResponse, summary="Get accuracy KPIs")
+async def api_get_accuracy_kpis():
+    return await get_accuracy_kpis()

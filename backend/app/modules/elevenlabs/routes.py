@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from app.config import get_settings
 from app.models.call_record import CallRecord
+from app.modules.dashboard.accuracy import compute_accuracy_scores
 
 router = APIRouter()
 
@@ -539,6 +540,15 @@ async def save_conversation(body: SaveConversationRequest):
         extracted_data=extracted,
     )
     await record.insert()
+
+    try:
+        scores = compute_accuracy_scores(record)
+        record.accuracy_scores = scores
+        await record.save()
+        logger.info("Auto-scored ElevenLabs call {}: overall={}", call_id, scores.get("overall_auto_score"))
+    except Exception as e:
+        logger.warning("Failed to auto-score ElevenLabs call {}: {}", call_id, e)
+
     logger.info(
         "ElevenLabs conversation saved: {} intent={} outcome={} provider='{}' patient='{}' extracted_keys={}",
         call_id, intent, outcome,

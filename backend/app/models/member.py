@@ -23,6 +23,7 @@ class Member(Document):
     effective_date: str
     term_date: Optional[str] = None
     ssn_last4: Optional[str] = None
+    address: Optional[str] = None
     address_zip: Optional[str] = None
     copay_primary: int = 0
     copay_specialist: int = 0

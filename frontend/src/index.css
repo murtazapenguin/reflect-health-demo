@@ -491,7 +491,7 @@
   .waveform-bar {
     width: 3px;
     border-radius: 2px;
-    background: linear-gradient(180deg, hsl(var(--reflect-pink)), hsl(var(--reflect-orange)));
+    background: hsl(var(--five9-accent));
     animation: waveform 0.6s ease-in-out infinite;
   }
 }

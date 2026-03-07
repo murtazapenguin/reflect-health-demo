@@ -1,32 +1,9 @@
-import { useKPIs, useKPITrend } from "@/hooks/use-api";
+import { useKPIs, useKPITrend, useAccuracyKPIs } from "@/hooks/use-api";
 import {
   Phone, CheckCircle2, PhoneOff, Clock, TrendingUp, TrendingDown,
   Shield, Target, FileText, ExternalLink, BarChart3, AlertTriangle,
+  XCircle,
 } from "lucide-react";
-
-const MOCK_QA = {
-  overallAccuracy: 94.2,
-  accuracyByIntent: [
-    { intent: "Eligibility", accuracy: 96.8, total: 142 },
-    { intent: "Claims", accuracy: 93.1, total: 87 },
-    { intent: "Prior Auth", accuracy: 91.5, total: 34 },
-    { intent: "General", accuracy: 89.7, total: 18 },
-  ],
-  confidenceDistribution: [
-    { range: "95-100%", count: 156, pct: 55.7 },
-    { range: "90-94%", count: 68, pct: 24.3 },
-    { range: "85-89%", count: 32, pct: 11.4 },
-    { range: "80-84%", count: 14, pct: 5.0 },
-    { range: "<80%", count: 10, pct: 3.6 },
-  ],
-  recentReviews: [
-    { id: "QA-1042", intent: "Eligibility", score: 98, status: "Passed", note: "Accurate coverage lookup" },
-    { id: "QA-1041", intent: "Claims", score: 87, status: "Flagged", note: "Missing appeal deadline in response" },
-    { id: "QA-1040", intent: "Eligibility", score: 95, status: "Passed", note: "Correct copay and deductible info" },
-    { id: "QA-1039", intent: "Prior Auth", score: 72, status: "Failed", note: "Incorrect transfer routing" },
-    { id: "QA-1038", intent: "Claims", score: 96, status: "Passed", note: "Accurate claim status with paid amount" },
-  ],
-};
 
 interface Five9ReportingViewProps {
   onNavigateToCallLog: () => void;
@@ -35,6 +12,7 @@ interface Five9ReportingViewProps {
 export function Five9ReportingView({ onNavigateToCallLog }: Five9ReportingViewProps) {
   const { data: kpis, isLoading: kpisLoading } = useKPIs();
   const { data: trend } = useKPITrend(30);
+  const { data: accuracy, isLoading: accuracyLoading } = useAccuracyKPIs();
 
   const trendMax = trend ? Math.max(...trend.map((t) => t.total_calls), 1) : 1;
 
@@ -215,138 +193,208 @@ export function Five9ReportingView({ onNavigateToCallLog }: Five9ReportingViewPr
         </div>
       </div>
 
-      {/* Section C: Quality Assurance (mock data) */}
+      {/* Section C: Quality Assurance (real data) */}
       <div className="space-y-3">
         <div className="text-[11px] font-semibold text-foreground flex items-center gap-1.5">
           <Shield className="h-3.5 w-3.5 text-five9-accent" />
           Quality Assurance
         </div>
 
-        {/* Overall accuracy */}
-        <div className="five9-card p-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="type-micro uppercase tracking-[0.12em] text-five9-muted">Overall AI Accuracy</span>
-            <span className="text-lg font-bold font-mono text-emerald-600">{MOCK_QA.overallAccuracy}%</span>
+        {accuracyLoading ? (
+          <div className="flex items-center justify-center py-6">
+            <div className="w-4 h-4 border-2 border-five9-accent/30 border-t-five9-accent rounded-full animate-spin" />
           </div>
-          <div className="h-2 rounded-full bg-secondary overflow-hidden">
-            <div
-              className="h-full rounded-full bg-emerald-500 transition-all duration-700"
-              style={{ width: `${MOCK_QA.overallAccuracy}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Accuracy by intent */}
-        <div className="five9-card p-3 space-y-2">
-          <span className="type-micro uppercase tracking-[0.12em] text-five9-muted flex items-center gap-1">
-            <Target className="h-3 w-3" /> Accuracy by Intent
-          </span>
-          <div className="space-y-2">
-            {MOCK_QA.accuracyByIntent.map((item) => (
-              <div key={item.intent} className="space-y-0.5">
-                <div className="flex items-center justify-between text-[10px]">
-                  <span className="text-foreground font-medium">{item.intent}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-five9-muted font-mono">{item.total} calls</span>
-                    <span className={`font-bold font-mono ${item.accuracy >= 95 ? "text-emerald-600" : item.accuracy >= 90 ? "text-five9-accent" : "text-amber-600"}`}>
-                      {item.accuracy}%
-                    </span>
+        ) : accuracy ? (
+          <>
+            {/* Overall accuracy + stats row */}
+            <div className="five9-card p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="type-micro uppercase tracking-[0.12em] text-five9-muted">Overall AI Accuracy</span>
+                <span className={`text-lg font-bold font-mono ${accuracy.avg_auto_score >= 90 ? "text-emerald-600" : accuracy.avg_auto_score >= 70 ? "text-five9-accent" : "text-amber-600"}`}>
+                  {accuracy.avg_auto_score.toFixed(1)}%
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-secondary overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-700 ${accuracy.avg_auto_score >= 90 ? "bg-emerald-500" : accuracy.avg_auto_score >= 70 ? "five9-accent-bg" : "bg-amber-500"}`}
+                  style={{ width: `${Math.min(accuracy.avg_auto_score, 100)}%` }}
+                />
+              </div>
+              <div className="grid grid-cols-4 gap-2 pt-1">
+                <div className="text-center">
+                  <div className="text-[9px] text-five9-muted uppercase">Scored</div>
+                  <div className="text-[12px] font-bold font-mono text-foreground">{accuracy.total_scored}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[9px] text-five9-muted uppercase">Reviewed</div>
+                  <div className="text-[12px] font-bold font-mono text-foreground">{accuracy.total_reviewed}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[9px] text-five9-muted uppercase">Needs Review</div>
+                  <div className="text-[12px] font-bold font-mono text-amber-600">{accuracy.needs_review}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-[9px] text-five9-muted uppercase">Human Avg</div>
+                  <div className="text-[12px] font-bold font-mono text-foreground">
+                    {accuracy.avg_human_score !== null ? `${accuracy.avg_human_score.toFixed(1)}` : "—"}
                   </div>
                 </div>
-                <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      item.accuracy >= 95 ? "bg-emerald-500" : item.accuracy >= 90 ? "five9-accent-bg" : "bg-amber-500"
-                    }`}
-                    style={{ width: `${item.accuracy}%` }}
-                  />
-                </div>
               </div>
-            ))}
-          </div>
-        </div>
+            </div>
 
-        {/* Confidence distribution */}
-        <div className="five9-card p-3 space-y-2">
-          <span className="type-micro uppercase tracking-[0.12em] text-five9-muted flex items-center gap-1">
-            <BarChart3 className="h-3 w-3" /> Confidence Score Distribution
-          </span>
-          <div className="space-y-1">
-            {MOCK_QA.confidenceDistribution.map((bucket) => (
-              <div key={bucket.range} className="flex items-center gap-2 text-[10px]">
-                <span className="w-14 text-five9-muted font-mono text-right shrink-0">{bucket.range}</span>
-                <div className="flex-1 h-4 rounded bg-secondary overflow-hidden">
-                  <div
-                    className={`h-full rounded transition-all duration-500 ${
-                      bucket.range.startsWith("95") || bucket.range.startsWith("90")
-                        ? "bg-emerald-500"
-                        : bucket.range.startsWith("85")
-                          ? "five9-accent-bg"
-                          : "bg-amber-500"
-                    }`}
-                    style={{ width: `${bucket.pct}%` }}
-                  />
-                </div>
-                <span className="w-16 text-foreground font-mono shrink-0">{bucket.count} ({bucket.pct}%)</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Recent QA reviews */}
-        <div className="five9-card p-3 space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="type-micro uppercase tracking-[0.12em] text-five9-muted flex items-center gap-1">
-              <FileText className="h-3 w-3" /> Recent QA Reviews
-            </span>
-            <button
-              onClick={onNavigateToCallLog}
-              className="text-[9px] text-five9-accent hover:underline flex items-center gap-0.5"
-            >
-              View in Call Log <ExternalLink className="h-2.5 w-2.5" />
-            </button>
-          </div>
-          <div className="space-y-1">
-            {MOCK_QA.recentReviews.map((review) => (
-              <div
-                key={review.id}
-                className="flex items-center justify-between p-2 rounded border border-border bg-card hover:bg-secondary/30 transition-colors"
-              >
-                <div className="flex items-center gap-2">
-                  {review.status === "Passed" ? (
-                    <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
-                  ) : review.status === "Flagged" ? (
-                    <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
-                  ) : (
-                    <AlertTriangle className="h-3 w-3 text-red-600 shrink-0" />
-                  )}
-                  <div>
-                    <div className="text-[10px] text-foreground font-medium">
-                      {review.id} · {review.intent}
+            {/* Accuracy by intent */}
+            {Object.keys(accuracy.accuracy_by_intent).length > 0 && (
+              <div className="five9-card p-3 space-y-2">
+                <span className="type-micro uppercase tracking-[0.12em] text-five9-muted flex items-center gap-1">
+                  <Target className="h-3 w-3" /> Accuracy by Intent
+                </span>
+                <div className="space-y-2">
+                  {Object.entries(accuracy.accuracy_by_intent).map(([intent, score]) => (
+                    <div key={intent} className="space-y-0.5">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-foreground font-medium capitalize">{intent.replace("_", " ")}</span>
+                        <span className={`font-bold font-mono ${score >= 90 ? "text-emerald-600" : score >= 70 ? "text-five9-accent" : "text-amber-600"}`}>
+                          {score.toFixed(1)}
+                        </span>
+                      </div>
+                      <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-500 ${
+                            score >= 90 ? "bg-emerald-500" : score >= 70 ? "five9-accent-bg" : "bg-amber-500"
+                          }`}
+                          style={{ width: `${Math.min(score, 100)}%` }}
+                        />
+                      </div>
                     </div>
-                    <div className="text-[9px] text-five9-muted">{review.note}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className={`text-[10px] font-mono font-bold ${
-                    review.score >= 90 ? "text-emerald-600" : review.score >= 80 ? "text-amber-600" : "text-red-600"
-                  }`}>
-                    {review.score}%
-                  </span>
-                  <span className={`text-[8px] font-medium px-1.5 py-0.5 rounded border ${
-                    review.status === "Passed"
-                      ? "text-emerald-700 bg-emerald-50 border-emerald-200"
-                      : review.status === "Flagged"
-                        ? "text-amber-700 bg-amber-50 border-amber-200"
-                        : "text-red-700 bg-red-50 border-red-200"
-                  }`}>
-                    {review.status}
-                  </span>
+                  ))}
                 </div>
               </div>
-            ))}
+            )}
+
+            {/* Score distribution */}
+            {Object.keys(accuracy.score_distribution).length > 0 && (() => {
+              const totalDist = Object.values(accuracy.score_distribution).reduce((a, b) => a + b, 0);
+              const orderedBuckets = ["90-100", "80-89", "70-79", "60-69", "0-59"];
+              return (
+                <div className="five9-card p-3 space-y-2">
+                  <span className="type-micro uppercase tracking-[0.12em] text-five9-muted flex items-center gap-1">
+                    <BarChart3 className="h-3 w-3" /> Score Distribution
+                  </span>
+                  <div className="space-y-1">
+                    {orderedBuckets.map((range) => {
+                      const count = accuracy.score_distribution[range] || 0;
+                      const pct = totalDist > 0 ? (count / totalDist) * 100 : 0;
+                      const barColor = range === "90-100" ? "bg-emerald-500"
+                        : range === "80-89" ? "bg-blue-500"
+                        : range === "70-79" ? "five9-accent-bg"
+                        : "bg-amber-500";
+                      return (
+                        <div key={range} className="flex items-center gap-2 text-[10px]">
+                          <span className="w-12 text-five9-muted font-mono text-right shrink-0">{range}</span>
+                          <div className="flex-1 h-4 rounded bg-secondary overflow-hidden">
+                            <div
+                              className={`h-full rounded transition-all duration-500 ${barColor}`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                          <span className="w-16 text-foreground font-mono shrink-0">{count} ({pct.toFixed(0)}%)</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Category averages from human reviews */}
+            {Object.keys(accuracy.category_averages).length > 0 && (
+              <div className="five9-card p-3 space-y-2">
+                <span className="type-micro uppercase tracking-[0.12em] text-five9-muted flex items-center gap-1">
+                  <Shield className="h-3 w-3" /> Human QA Category Averages
+                </span>
+                <div className="grid grid-cols-3 gap-2">
+                  {Object.entries(accuracy.category_averages).map(([cat, avg]) => (
+                    <div key={cat} className="p-2 rounded border border-border bg-secondary/20 text-center">
+                      <div className="text-[9px] text-five9-muted uppercase capitalize">{cat}</div>
+                      <div className={`text-lg font-bold font-mono ${avg >= 90 ? "text-emerald-600" : avg >= 70 ? "text-five9-accent" : "text-amber-600"}`}>
+                        {avg.toFixed(0)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recent QA reviews */}
+            <div className="five9-card p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="type-micro uppercase tracking-[0.12em] text-five9-muted flex items-center gap-1">
+                  <FileText className="h-3 w-3" /> Recent QA Reviews
+                </span>
+                <button
+                  onClick={onNavigateToCallLog}
+                  className="text-[9px] text-five9-accent hover:underline flex items-center gap-0.5"
+                >
+                  View in Call Log <ExternalLink className="h-2.5 w-2.5" />
+                </button>
+              </div>
+              {accuracy.recent_reviews.length === 0 ? (
+                <p className="text-[10px] text-five9-muted text-center py-3">
+                  No QA reviews yet. Open a call in the Call Log to submit one.
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {accuracy.recent_reviews.map((review) => (
+                    <div
+                      key={review.id}
+                      className="flex items-center justify-between p-2 rounded border border-border bg-card hover:bg-secondary/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        {review.status === "passed" ? (
+                          <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                        ) : review.status === "flagged" ? (
+                          <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                        ) : review.status === "failed" ? (
+                          <XCircle className="h-3 w-3 text-red-600 shrink-0" />
+                        ) : (
+                          <FileText className="h-3 w-3 text-gray-500 shrink-0" />
+                        )}
+                        <div>
+                          <div className="text-[10px] text-foreground font-medium">
+                            {review.call_id} &middot; {review.reviewer}
+                          </div>
+                          {review.notes && <div className="text-[9px] text-five9-muted">{review.notes}</div>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className={`text-[10px] font-mono font-bold ${
+                          review.review_score >= 90 ? "text-emerald-600" : review.review_score >= 80 ? "text-amber-600" : "text-red-600"
+                        }`}>
+                          {review.review_score}
+                        </span>
+                        <span className={`text-[8px] font-medium px-1.5 py-0.5 rounded border capitalize ${
+                          review.status === "passed"
+                            ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                            : review.status === "flagged"
+                              ? "text-amber-700 bg-amber-50 border-amber-200"
+                              : review.status === "failed"
+                                ? "text-red-700 bg-red-50 border-red-200"
+                                : "text-gray-600 bg-gray-50 border-gray-200"
+                        }`}>
+                          {review.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="five9-card p-4 text-center text-[11px] text-five9-muted">
+            No accuracy data available yet. Calls will be auto-scored as they come in.
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

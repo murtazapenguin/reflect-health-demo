@@ -4,6 +4,7 @@ from typing import Optional
 from loguru import logger
 
 from app.models.call_record import CallRecord
+from app.modules.dashboard.accuracy import compute_accuracy_scores
 from app.modules.webhooks.schemas import BlandCallCompletePayload
 
 
@@ -215,6 +216,15 @@ async def ingest_bland_call(payload: BlandCallCompletePayload) -> CallRecord:
             if payload.end_at:
                 existing.ended_at = _parse_datetime(payload.end_at)
             await existing.save()
+
+            try:
+                scores = compute_accuracy_scores(existing)
+                existing.accuracy_scores = scores
+                await existing.save()
+                logger.info("Auto-scored Bland call (update) {}: overall={}", call_id, scores.get("overall_auto_score"))
+            except Exception as e:
+                logger.warning("Failed to auto-score Bland call (update) {}: {}", call_id, e)
+
         return existing
 
     record = CallRecord(
@@ -239,6 +249,15 @@ async def ingest_bland_call(payload: BlandCallCompletePayload) -> CallRecord:
         extracted_data=_clean_extracted_data(variables) if variables else {},
     )
     await record.insert()
+
+    try:
+        scores = compute_accuracy_scores(record)
+        record.accuracy_scores = scores
+        await record.save()
+        logger.info("Auto-scored Bland call {}: overall={}", call_id, scores.get("overall_auto_score"))
+    except Exception as e:
+        logger.warning("Failed to auto-score Bland call {}: {}", call_id, e)
+
     logger.info("Call record created: {} intent={} outcome={} tags={}", call_id, intent, outcome, tags)
     return record
 

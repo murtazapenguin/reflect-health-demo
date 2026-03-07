@@ -73,6 +73,81 @@ export interface CallDetail extends CallSummary {
   transcript: TranscriptEntry[];
   recording_url: string | null;
   extracted_data: Record<string, unknown>;
+  accuracy_scores: Record<string, unknown>;
+}
+
+export interface QAReview {
+  id: string;
+  call_id: string;
+  reviewer: string;
+  review_score: number;
+  categories: Record<string, number>;
+  notes: string;
+  status: string;
+  reviewed_at: string;
+}
+
+export interface QAReviewInput {
+  reviewer: string;
+  review_score: number;
+  categories: Record<string, number>;
+  notes: string;
+  status: string;
+}
+
+export interface AccuracyKPIs {
+  avg_auto_score: number;
+  avg_human_score: number | null;
+  score_distribution: Record<string, number>;
+  accuracy_by_intent: Record<string, number>;
+  total_scored: number;
+  total_reviewed: number;
+  needs_review: number;
+  recent_reviews: QAReview[];
+  category_averages: Record<string, number>;
+}
+
+export interface CallerContextMember {
+  member_id: string;
+  first_name: string;
+  last_name: string;
+  dob: string;
+  plan_name: string;
+  status: string;
+  effective_date: string;
+  term_date: string | null;
+  copay_primary: number | null;
+  copay_specialist: number | null;
+  deductible: number | null;
+  deductible_met: number | null;
+  out_of_pocket_max: number | null;
+  out_of_pocket_met: number | null;
+}
+
+export interface CallerContextClaim {
+  claim_number: string;
+  status: string;
+  date_of_service: string;
+  procedure_desc: string;
+  billed_amount: number | null;
+  paid_amount: number | null;
+  denial_reason: string | null;
+}
+
+export interface CallerContextPriorAuth {
+  pa_id: string;
+  status: string;
+  service_description: string;
+  submitted_date: string;
+  decision_date: string | null;
+}
+
+export interface CallerContext {
+  found: boolean;
+  message?: string;
+  member?: CallerContextMember;
+  claims?: CallerContextClaim[];
+  prior_auths?: CallerContextPriorAuth[];
 }
 
 export interface CallsPage {
@@ -119,6 +194,32 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ flagged }),
     }),
+
+  submitQAReview: (callId: string, data: QAReviewInput) =>
+    request<QAReview>(`/dashboard/calls/${callId}/review`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  getCallReviews: (callId: string) =>
+    request<QAReview[]>(`/dashboard/calls/${callId}/reviews`),
+
+  getAccuracyKPIs: () => request<AccuracyKPIs>("/dashboard/kpis/accuracy"),
+
+  registerSession: (conversationId: string) =>
+    request<{ status: string; conversation_id: string }>("/voice/session/start", {
+      method: "POST",
+      body: JSON.stringify({ conversation_id: conversationId }),
+    }),
+
+  endSession: (conversationId: string) =>
+    request<{ status: string }>("/voice/session/end", {
+      method: "POST",
+      body: JSON.stringify({ conversation_id: conversationId }),
+    }),
+
+  getCallerContext: (memberId: string) =>
+    request<CallerContext>(`/voice/caller-context/${encodeURIComponent(memberId)}`),
 
   getElevenLabsSignedUrl: () => request<{ signed_url: string }>("/elevenlabs/token"),
   getElevenLabsConfig: () => request<{ agent_id: string }>("/elevenlabs/config"),

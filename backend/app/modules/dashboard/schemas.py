@@ -42,6 +42,7 @@ class CallDetail(BaseModel):
     source: str = "bland"
     auth_success: Optional[bool] = None
     extracted_data: Dict[str, Any] = {}
+    accuracy_scores: Dict[str, Any] = {}
 
 
 class CallLogResponse(BaseModel):
@@ -75,3 +76,34 @@ class TagUpdateRequest(BaseModel):
 
 class FlagUpdateRequest(BaseModel):
     flagged: bool
+
+
+class QAReviewRequest(BaseModel):
+    reviewer: str
+    review_score: int
+    categories: Dict[str, int] = {}
+    notes: str = ""
+    status: str = "pending"
+
+
+class QAReviewResponse(BaseModel):
+    id: str
+    call_id: str
+    reviewer: str
+    review_score: int
+    categories: Dict[str, int] = {}
+    notes: str = ""
+    status: str = "pending"
+    reviewed_at: str
+
+
+class AccuracyKPIResponse(BaseModel):
+    avg_auto_score: float
+    avg_human_score: Optional[float] = None
+    score_distribution: Dict[str, int] = {}
+    accuracy_by_intent: Dict[str, float] = {}
+    total_scored: int = 0
+    total_reviewed: int = 0
+    needs_review: int = 0
+    recent_reviews: List[QAReviewResponse] = []
+    category_averages: Dict[str, float] = {}

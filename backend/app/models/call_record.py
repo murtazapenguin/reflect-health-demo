@@ -27,6 +27,7 @@ class CallRecord(Document):
     source: str = "bland"  # bland | elevenlabs
     auth_success: Optional[bool] = None
     extracted_data: Dict[str, Any] = Field(default_factory=dict)
+    accuracy_scores: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     class Settings:

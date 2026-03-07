@@ -1,216 +1,35 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { useConversation } from "@elevenlabs/react";
 import {
   Mic, MicOff, PhoneOff, Volume2, VolumeX, Loader2,
   MessageSquare, Bot, User, AlertCircle, Phone, ExternalLink, CheckCircle,
+  ArrowRight,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { api } from "@/lib/api";
-import penguinLogo from "@/assets/penguin-ai-logo.png";
+import penguinAiLogo from "@/assets/penguin-ai-logo.png";
 import { DemoDataReference } from "./DemoDataReference";
-import { Five9ScreenPop } from "./embedded/Five9ScreenPop";
+import { useConversationContext } from "@/contexts/ConversationContext";
 
-const TRANSFER_PHRASES = ["transfer", "connect you with", "team member", "human agent", "representative", "specialist"];
+const TRANSFER_PHRASES = [
+  "transfer you",
+  "transferring you",
+  "connect you with a",
+  "connecting you with a",
+  "routing you to",
+  "passing you to",
+  "let me get a human",
+  "hand you off",
+  "handing you off",
+  "escalating to",
+  "i'll connect you to a",
+];
 
-function detectEscalation(messages: Message[]): boolean {
-  return messages.some(
-    (m) => m.role === "agent" && TRANSFER_PHRASES.some((p) => m.text.toLowerCase().includes(p))
+function detectTransfer(messages: Message[]): boolean {
+  const lastAgentMessages = messages.filter((m) => m.role === "agent").slice(-3);
+  return lastAgentMessages.some((m) =>
+    TRANSFER_PHRASES.some((p) => m.text.toLowerCase().includes(p))
   );
-}
-
-function extractIntent(messages: Message[]): string {
-  const userText = messages.filter((m) => m.role === "user").map((m) => m.text).join(" ").toLowerCase();
-  if (userText.includes("prior auth") || userText.includes("authorization")) return "Prior Authorization";
-  if (userText.includes("eligib") || userText.includes("coverage") || userText.includes("benefit")) return "Eligibility Verification";
-  if (userText.includes("claim") || userText.includes("paid") || userText.includes("denied")) return "Claim Status";
-  // Fall back to agent messages only for action-confirming keywords (not the greeting)
-  const agentText = messages.filter((m) => m.role === "agent").map((m) => m.text).join(" ").toLowerCase();
-  if (agentText.includes("prior auth") && !agentText.includes("i can help with")) return "Prior Authorization";
-  if (agentText.includes("coverage is") || agentText.includes("plan name") || agentText.includes("deductible")) return "Eligibility Verification";
-  if ((agentText.includes("claim") && (agentText.includes("paid") || agentText.includes("denied") || agentText.includes("pending")))) return "Claim Status";
-  return "General Inquiry";
-}
-
-function extractProviderName(messages: Message[]): string | undefined {
-  for (const m of messages) {
-    const match = m.text.match(/(?:Dr\.\s+\w+(?:\s+\w+)?|I'?m\s+(?:calling\s+from\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+))/);
-    if (match) return match[0];
-  }
-  return undefined;
-}
-
-function extractMemberId(messages: Message[]): string | undefined {
-  for (const m of messages) {
-    const match = m.text.match(/\bMBR-\d+\b/i);
-    if (match) return match[0].toUpperCase();
-  }
-  return undefined;
-}
-
-function buildElevenLabsSummary(messages: Message[], intent: string): string {
-  const userText = messages.filter((m) => m.role === "user").map((m) => m.text).join(" ").toLowerCase();
-  const agentText = messages.filter((m) => m.role === "agent").map((m) => m.text).join(" ").toLowerCase();
-  const parts: string[] = [];
-
-  // Check user messages for what they provided
-  const userProvidedNpi = userText.match(/\b\d{10}\b/) !== null;
-  const userMentionedZip = userText.match(/\b\d{5}\b/) !== null;
-  const userMentionedMember = userText.includes("mbr-") || userText.includes("member");
-  const userAskedPriorAuth = userText.includes("prior auth") || userText.includes("authorization");
-
-  // Check agent messages for confirmed actions (not the greeting)
-  const agentVerifiedNpi = agentText.includes("verified") && agentText.includes("npi");
-  const agentVerifiedZip = agentText.includes("zip") && (agentText.includes("verified") || agentText.includes("confirmed"));
-  const agentDidEligibility = agentText.includes("coverage is") || agentText.includes("plan name") || agentText.includes("deductible");
-  const agentDidClaim = agentText.includes("claim") && (agentText.includes("paid") || agentText.includes("denied") || agentText.includes("pending"));
-
-  if (userProvidedNpi || agentVerifiedNpi) parts.push("authenticated provider via NPI");
-  if (userMentionedZip || agentVerifiedZip) parts.push("verified practice zip code");
-  if (userMentionedMember) parts.push("collected patient/member information");
-  if (agentDidEligibility) parts.push("completed eligibility lookup");
-  if (agentDidClaim) parts.push("completed claim status lookup");
-  if (userAskedPriorAuth) parts.push("identified prior authorization request");
-
-  const callerType = userText.includes("provider") ? "Provider" : userText.includes("member") ? "Member" : "Caller";
-
-  if (parts.length > 0) {
-    return `${callerType} called regarding ${intent.toLowerCase()}. AI ${parts.join(", ")} before transferring to a human agent for further assistance.`;
-  }
-  return `${callerType} requested ${intent.toLowerCase()}. Transferred to the appropriate team.`;
-}
-
-function buildStepsCompleted(messages: Message[]): string[] {
-  const userText = messages.filter((m) => m.role === "user").map((m) => m.text).join(" ").toLowerCase();
-  const agentText = messages.filter((m) => m.role === "agent").map((m) => m.text).join(" ").toLowerCase();
-  const steps: string[] = [];
-
-  // NPI: user provided a 10-digit number, or agent confirmed verification
-  if (userText.match(/\b\d{10}\b/) || (agentText.includes("npi") && agentText.includes("verified"))) {
-    if (agentText.includes("verified") || agentText.includes("dr.") || agentText.includes("doctor")) {
-      steps.push("Provider identity verified via NPI lookup");
-    } else {
-      steps.push("NPI provided — verification attempted");
-    }
-  }
-  // Zip: user provided a 5-digit number and agent confirmed
-  if (userText.match(/\b\d{5}\b/) && agentText.includes("zip")) {
-    if (agentText.includes("verified") || agentText.includes("confirmed")) {
-      steps.push("Practice zip code confirmed");
-    } else {
-      steps.push("Zip code verification attempted");
-    }
-  }
-  // PHI: user mentioned member ID, name, or DOB
-  if (userText.includes("mbr-") || (agentText.includes("member") && agentText.includes("verified"))) {
-    steps.push("Patient PHI collected and verified");
-  }
-  // Eligibility: only if agent actually delivered results (not just mentioned it in greeting)
-  if (agentText.includes("coverage is") || agentText.includes("plan name") || agentText.includes("deductible is")) {
-    if (agentText.includes("active") || agentText.includes("found")) {
-      steps.push("Patient eligibility verified — member active");
-    } else if (agentText.includes("not found") || agentText.includes("no patient")) {
-      steps.push("Patient lookup attempted — member not found");
-    }
-  }
-  // Claims: only if agent delivered claim results
-  if (agentText.includes("claim") && (agentText.includes("paid") || agentText.includes("denied") || agentText.includes("pending"))) {
-    steps.push("Claim status retrieved");
-  }
-  // Prior auth: based on user request, not agent greeting
-  if (userText.includes("prior auth") || userText.includes("authorization")) {
-    steps.push("Prior authorization request identified — requires human handling");
-  }
-
-  return steps;
-}
-
-function buildRecommendedActions(messages: Message[], intent: string): string[] {
-  const allText = messages.map((m) => m.text).join(" ").toLowerCase();
-  const actions: string[] = [];
-
-  if (intent.toLowerCase().includes("prior")) {
-    actions.push("Process prior authorization request for the patient");
-    actions.push("Verify clinical documentation is on file");
-  } else if (allText.includes("not found") || allText.includes("no patient")) {
-    actions.push("Verify patient demographics manually in the system");
-    actions.push("Check alternate spellings or member ID");
-  } else if (allText.includes("frustrat") || allText.includes("ridiculous") || allText.includes("already told")) {
-    actions.push("Acknowledge caller's frustration and de-escalate");
-    actions.push("Complete the original request manually");
-  } else if (allText.includes("invalid") || allText.includes("wasn't able to validate")) {
-    actions.push("Verify caller identity through alternate method");
-    actions.push("Check NPI against provider directory manually");
-  } else {
-    actions.push("Review AI conversation context above and continue from where AI left off");
-    actions.push("Complete caller's original request");
-  }
-
-  return actions;
-}
-
-function extractCallerType(messages: Message[]): "Provider" | "Member" | undefined {
-  const userText = messages.filter((m) => m.role === "user").map((m) => m.text).join(" ").toLowerCase();
-  if (userText.includes("provider") || userText.includes("practice") || userText.includes("doctor") || userText.includes("clinic")) return "Provider";
-  if (userText.includes("member") || userText.includes("patient") || userText.includes("subscriber")) return "Member";
-  const agentText = messages.filter((m) => m.role === "agent").map((m) => m.text).join(" ").toLowerCase();
-  if (agentText.includes("your npi") || agentText.includes("provider")) return "Provider";
-  if (agentText.includes("your member id") || agentText.includes("as a member")) return "Member";
-  return undefined;
-}
-
-function extractPatientName(messages: Message[]): string | undefined {
-  for (const m of messages) {
-    if (m.role === "agent") {
-      const verifiedMatch = m.text.match(/(?:Patient verified|Verified)[^.]*?([A-Z][a-z]+\s+[A-Z][a-z]+)/);
-      if (verifiedMatch) return verifiedMatch[1];
-      const forMatch = m.text.match(/(?:record|results?|coverage|eligibility|information|details)\s+(?:for|of)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)/);
-      if (forMatch) return forMatch[1];
-    }
-  }
-  return undefined;
-}
-
-function buildExtractedData(messages: Message[]): Record<string, string> {
-  const data: Record<string, string> = {};
-
-  for (const m of messages) {
-    const npiMatch = m.text.match(/\b(\d{10})\b/);
-    if (npiMatch && !data["NPI"]) data["NPI"] = npiMatch[1];
-
-    const memberMatch = m.text.match(/\bMBR-\d+/i);
-    if (memberMatch && !data["Member ID"]) data["Member ID"] = memberMatch[0].toUpperCase();
-
-    const claimMatch = m.text.match(/\bCLM-\d+/i);
-    if (claimMatch && !data["Claim #"]) data["Claim #"] = claimMatch[0].toUpperCase();
-
-    const planMatch = m.text.match(/Reflect\s+(Gold|Silver|Platinum)\s+(PPO|HMO)/i);
-    if (planMatch && !data["Plan"]) data["Plan"] = planMatch[0];
-
-    const dobMatch = m.text.match(/\b(\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/);
-    if (dobMatch && !data["DOB"]) data["DOB"] = dobMatch[1];
-
-    const dosMatch = m.text.match(/date of service[:\s]+([^\n,.]+)/i);
-    if (dosMatch && !data["Date of Service"]) data["Date of Service"] = dosMatch[1].trim();
-
-    const statusMatch = m.text.match(/(?:claim|status|coverage)\s+(?:is\s+)?(?:currently\s+)?(active|inactive|termed|paid|denied|pending|in[- ]process)/i);
-    if (statusMatch && !data["Status"]) data["Status"] = statusMatch[1].charAt(0).toUpperCase() + statusMatch[1].slice(1);
-
-    if (m.role === "user") {
-      const zipMatch = m.text.match(/\b(\d{5})\b/);
-      if (zipMatch && !data["Zip"]) data["Zip"] = zipMatch[1];
-    }
-
-    if (m.role === "agent" && !data["Provider"]) {
-      const drMatch = m.text.match(/(?:Dr\.?|Doctor)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/);
-      if (drMatch) data["Provider"] = `Dr. ${drMatch[1]}`;
-    }
-  }
-
-  return data;
 }
 
 interface Message {
@@ -226,35 +45,34 @@ export function VoiceAgent() {
   const [error, setError] = useState<string | null>(null);
   const [volume, setVolume] = useState(0.8);
   const [micMuted, setMicMuted] = useState(false);
-  const [conversationId, setConversationId] = useState<string | null>(null);
   const [savedCallId, setSavedCallId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [showTransferBanner, setShowTransferBanner] = useState(false);
-  const [showScreenPop, setShowScreenPop] = useState(false);
-  const [screenPopData, setScreenPopData] = useState<{
-    intent: string; escalationReason: string; aiSummary: string;
-    providerName?: string; providerNpi?: string; patientName?: string;
-    memberId?: string; memberDob?: string; planName?: string;
-    callerType?: "Provider" | "Member";
-    stepsCompleted?: string[]; extractedData?: Record<string, string>;
-    recommendedActions?: string[];
-  } | null>(null);
+  const [wasTransferred, setWasTransferred] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<Date | null>(null);
-  const navigate = useNavigate();
-
   const isEndingRef = useRef(false);
 
+  const { conversationId, setConversationId, setIsCallActive } = useConversationContext();
+
   const conversation = useConversation({
-    onConnect: ({ conversationId: connId }) => {
+    onConnect: async ({ conversationId: connId }) => {
       setIsConnecting(false);
       setError(null);
       setConversationId(connId);
+      setIsCallActive(true);
       startTimeRef.current = new Date();
       setSavedCallId(null);
+      setWasTransferred(false);
       isEndingRef.current = false;
+
+      try {
+        await api.registerSession(connId);
+      } catch {
+        console.error("Failed to register session");
+      }
     },
     onDisconnect: () => {
+      setIsCallActive(false);
       if (!isEndingRef.current && messages.length > 0) {
         isEndingRef.current = true;
         saveAndCleanup();
@@ -284,20 +102,15 @@ export function VoiceAgent() {
     }
   }, [messages]);
 
-
   const startConversation = useCallback(async () => {
     setIsConnecting(true);
     setError(null);
     setMessages([]);
-    setShowScreenPop(false);
-    setScreenPopData(null);
+    setWasTransferred(false);
 
     try {
       const { signed_url } = await api.getElevenLabsSignedUrl();
-      const id = await conversation.startSession({
-        signedUrl: signed_url,
-      });
-      setConversationId(id);
+      await conversation.startSession({ signedUrl: signed_url });
     } catch (err: any) {
       const msg = err?.message || "Failed to start conversation";
       if (msg.includes("503") || msg.includes("not configured")) {
@@ -319,36 +132,8 @@ export function VoiceAgent() {
 
     if (currentMessages.length === 0) return;
 
-    // Detect escalation and build screen pop data
-    if (detectEscalation(currentMessages)) {
-      const intent = extractIntent(currentMessages);
-      const extracted = buildExtractedData(currentMessages);
-      const callerType = extractCallerType(currentMessages);
-      const popData = {
-        intent,
-        escalationReason: "Caller requested human assistance — transferred to agent queue",
-        aiSummary: buildElevenLabsSummary(currentMessages, intent),
-        providerName: extracted["Provider"] || extractProviderName(currentMessages),
-        providerNpi: extracted["NPI"],
-        patientName: extractPatientName(currentMessages),
-        memberId: extracted["Member ID"] || extractMemberId(currentMessages),
-        memberDob: extracted["DOB"],
-        planName: extracted["Plan"],
-        callerType,
-        stepsCompleted: buildStepsCompleted(currentMessages),
-        extractedData: extracted,
-        recommendedActions: buildRecommendedActions(currentMessages, intent),
-      };
-      setScreenPopData(popData);
-      setShowTransferBanner(true);
-      setTimeout(() => {
-        setShowScreenPop(true);
-        setTimeout(() => {
-          if (transcriptRef.current) {
-            transcriptRef.current.scrollTop = transcriptRef.current.scrollHeight;
-          }
-        }, 100);
-      }, 2500);
+    if (detectTransfer(currentMessages)) {
+      setWasTransferred(true);
     }
 
     setIsSaving(true);
@@ -371,371 +156,268 @@ export function VoiceAgent() {
     } finally {
       setIsSaving(false);
     }
+
+    if (convId) {
+      try {
+        await api.endSession(convId);
+      } catch {
+        // ignore
+      }
+    }
   }, [messages, conversationId]);
 
   const endConversation = useCallback(async () => {
     if (isEndingRef.current) return;
     isEndingRef.current = true;
+    setIsCallActive(false);
 
     await conversation.endSession();
     await saveAndCleanup();
-  }, [conversation, saveAndCleanup]);
+  }, [conversation, saveAndCleanup, setIsCallActive]);
 
   const isActive = conversation.status === "connected";
 
   return (
-    <div className="space-y-5">
+    <div className="five9-panel-bg h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center gap-3">
-        <img src={penguinLogo} alt="PenguinAI" className="h-8 w-8 object-contain" />
-        <div>
-          <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            Live Voice Agent
-            {isActive && (
-              <Badge className="bg-emerald-100 text-emerald-700 text-[9px] animate-pulse">
-                Connected
-              </Badge>
-            )}
-          </h2>
-          <p className="text-[11px] text-muted-foreground">
-            Talk to the AI agent directly in your browser — powered by ElevenLabs
-          </p>
+      <div className="flex items-center justify-between px-4 py-3 border-b five9-border shrink-0">
+        <div className="flex items-center gap-2">
+          <img src={penguinAiLogo} alt="PenguinAI" className="h-4" />
+          <div>
+            <h2 className="text-[12px] font-semibold text-foreground flex items-center gap-2">
+              Live Voice Agent
+              {isActive && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Connected
+                </span>
+              )}
+            </h2>
+            <p className="text-[10px] text-five9-muted">
+              Powered by ElevenLabs
+            </p>
+          </div>
+        </div>
+        {/* Session info */}
+        <div className="flex items-center gap-3">
+          {conversationId && (
+            <span className="text-[9px] font-mono text-five9-muted">{conversationId.slice(0, 10)}...</span>
+          )}
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-five9-muted">{messages.length} msgs</span>
+          </div>
+          {(isSaving || savedCallId) && (
+            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium ${
+              isSaving ? "bg-amber-50 text-amber-700 border border-amber-200" : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+            }`}>
+              {isSaving ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <CheckCircle className="h-2.5 w-2.5" />}
+              {isSaving ? "Saving" : "Saved"}
+            </span>
+          )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Main conversation area */}
-        <div className="lg:col-span-2">
-          <Card className="h-[600px] flex flex-col">
-            <CardHeader className="pb-2 shrink-0">
-              <CardTitle className="text-sm flex items-center gap-2">
-                <MessageSquare className="h-4 w-4 text-primary" />
-                Conversation
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 flex flex-col min-h-0">
-              <div
-                ref={transcriptRef}
-                className="flex-1 overflow-y-auto space-y-3 mb-4 pr-1"
+      {/* Conversation area */}
+      <div className="flex-1 flex flex-col min-h-0 px-4 py-3">
+        <div ref={transcriptRef} className="flex-1 overflow-y-auto space-y-2.5 mb-3 pr-1">
+          {messages.length === 0 && !isActive && !isConnecting ? (
+            <div className="flex flex-col items-center justify-center h-full text-center px-8">
+              <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
+                <Mic className="h-7 w-7 text-gray-400" />
+              </div>
+              <h3 className="text-sm font-semibold text-foreground mb-1">
+                Ready to connect
+              </h3>
+              <p className="text-[11px] text-five9-muted max-w-xs mb-4">
+                Start a conversation with the AI healthcare agent. Ask about eligibility
+                or claims status.
+              </p>
+              <button
+                onClick={startConversation}
+                disabled={isConnecting}
+                className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg five9-accent-bg text-white text-sm font-medium hover:opacity-90 transition-opacity shadow-sm disabled:opacity-50"
               >
-                {messages.length === 0 && !isActive && !isConnecting ? (
-                  <div className="flex flex-col items-center justify-center h-full text-center px-8">
-                    <div className="relative w-24 h-24 rounded-full reflect-gradient flex items-center justify-center mb-6 shadow-lg">
-                      <Mic className="h-10 w-10 text-white" />
-                      <div className="absolute inset-0 rounded-full border-2 border-primary/20 animate-ping" style={{ animationDuration: "3s" }} />
-                    </div>
-                    <h3 className="text-lg font-semibold text-foreground mb-2">
-                      Ready to connect
-                    </h3>
-                    <p className="text-sm text-muted-foreground max-w-sm mb-6">
-                      Start a conversation with the AI healthcare agent. Ask about eligibility
-                      or claims status — just like calling the phone line.
-                    </p>
-                    <Button
-                      onClick={startConversation}
-                      disabled={isConnecting}
-                      className="reflect-gradient text-white hover:opacity-90 shadow-lg px-8 py-3"
-                    >
-                      {isConnecting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Connecting...
-                        </>
-                      ) : (
-                        <>
-                          <Phone className="h-4 w-4 mr-2" />
-                          Start Conversation
-                        </>
-                      )}
-                    </Button>
-                  </div>
+                {isConnecting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Connecting...
+                  </>
                 ) : (
-                  messages.map((msg, idx) => (
-                    <div
-                      key={idx}
-                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                    >
-                      <div
-                        className={`max-w-[80%] rounded-xl px-4 py-2.5 ${
-                          msg.role === "agent"
-                            ? "bg-primary/5 border border-primary/15"
-                            : "bg-secondary border border-border"
+                  <>
+                    <Phone className="h-4 w-4" />
+                    Start Conversation
+                  </>
+                )}
+              </button>
+            </div>
+          ) : (
+            <>
+              {messages.map((msg, idx) => (
+                <div
+                  key={idx}
+                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[80%] rounded-lg px-3.5 py-2 ${
+                      msg.role === "agent"
+                        ? "five9-card"
+                        : "bg-gray-100 border border-gray-200"
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      {msg.role === "agent" ? (
+                        <Bot className="h-3 w-3 text-five9-accent" />
+                      ) : (
+                        <User className="h-3 w-3 text-gray-400" />
+                      )}
+                      <span
+                        className={`text-[9px] font-bold uppercase tracking-wider ${
+                          msg.role === "agent" ? "text-five9-accent" : "text-five9-muted"
                         }`}
                       >
-                        <div className="flex items-center gap-1.5 mb-1">
-                          {msg.role === "agent" ? (
-                            <Bot className="h-3 w-3 text-primary" />
-                          ) : (
-                            <User className="h-3 w-3 text-muted-foreground" />
-                          )}
-                          <span
-                            className={`text-[10px] font-bold uppercase tracking-wider ${
-                              msg.role === "agent"
-                                ? "reflect-gradient-text"
-                                : "text-muted-foreground"
-                            }`}
-                          >
-                            {msg.role === "agent" ? "AI Agent" : "You"}
-                          </span>
-                        </div>
-                        <p className="text-sm text-foreground leading-relaxed">{msg.text}</p>
-                      </div>
+                        {msg.role === "agent" ? "AI Agent" : "You"}
+                      </span>
                     </div>
-                  ))
-                )}
+                    <p className="text-[12px] text-foreground leading-relaxed">{msg.text}</p>
+                  </div>
+                </div>
+              ))}
 
-                {isActive && conversation.isSpeaking && (
-                  <div className="flex justify-start">
-                    <div className="bg-primary/5 border border-primary/15 rounded-xl px-4 py-3 flex items-center gap-3">
-                      <div className="flex items-center gap-[3px] h-5">
-                        {[0, 0.1, 0.2, 0.3, 0.15, 0.25, 0.05].map((delay, i) => (
-                          <div
-                            key={i}
-                            className="waveform-bar"
-                            style={{ animationDelay: `${delay}s` }}
-                          />
-                        ))}
-                      </div>
-                      <span className="text-[10px] text-primary font-medium">Agent speaking...</span>
+              {isActive && conversation.isSpeaking && (
+                <div className="flex justify-start">
+                  <div className="five9-card px-3.5 py-2.5 flex items-center gap-3">
+                    <div className="flex items-center gap-[3px] h-4">
+                      {[0, 0.1, 0.2, 0.3, 0.15, 0.25, 0.05].map((delay, i) => (
+                        <div
+                          key={i}
+                          className="waveform-bar"
+                          style={{ animationDelay: `${delay}s` }}
+                        />
+                      ))}
                     </div>
+                    <span className="text-[10px] text-five9-accent font-medium">Agent speaking...</span>
                   </div>
-                )}
-
-                {showTransferBanner && (
-                  <div className="mx-auto w-full max-w-md animate-fade-in">
-                    <div className="rounded-xl border-2 border-amber-400 bg-amber-50 p-4 space-y-3">
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="relative">
-                          <Phone className="h-5 w-5 text-amber-600" />
-                          <div className="absolute inset-0 rounded-full border-2 border-amber-400 animate-ping" style={{ animationDuration: "1.5s" }} />
-                        </div>
-                        <span className="text-sm font-semibold text-amber-800">
-                          {showScreenPop ? "Call Transferred" : "Transferring to Human Agent..."}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-center gap-1.5">
-                        {showScreenPop ? (
-                          <CheckCircle className="h-4 w-4 text-emerald-600" />
-                        ) : (
-                          <>
-                            <div className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: "0ms" }} />
-                            <div className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: "150ms" }} />
-                            <div className="w-2 h-2 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: "300ms" }} />
-                          </>
-                        )}
-                        <span className="text-xs text-amber-700 ml-1">
-                          {showScreenPop
-                            ? "Connected — Agent receiving handoff context below"
-                            : "Packaging conversation context for human agent..."}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {isActive && (
-                <div className="flex items-center gap-3 pt-3 border-t border-border shrink-0">
-                  <div className="relative">
-                    <Button
-                      variant={micMuted ? "destructive" : "outline"}
-                      size="icon"
-                      className={`h-10 w-10 rounded-full ${!micMuted ? "voice-pulse-active" : ""}`}
-                      onClick={() => setMicMuted(!micMuted)}
-                      title={micMuted ? "Unmute" : "Mute"}
-                    >
-                      {micMuted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                    </Button>
-                  </div>
-
-                  <div className="flex items-center gap-2 flex-1">
-                    {volume > 0 ? (
-                      <Volume2 className="h-4 w-4 text-muted-foreground shrink-0" />
-                    ) : (
-                      <VolumeX className="h-4 w-4 text-muted-foreground shrink-0" />
-                    )}
-                    <Slider
-                      value={[volume]}
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      className="flex-1"
-                      onValueChange={([v]) => setVolume(v)}
-                    />
-                  </div>
-
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={endConversation}
-                    className="rounded-full px-4"
-                  >
-                    <PhoneOff className="h-4 w-4 mr-1" />
-                    End
-                  </Button>
                 </div>
               )}
-            </CardContent>
-          </Card>
+
+              {/* Subtle transfer indicator */}
+              {wasTransferred && (
+                <div className="flex justify-center py-2 animate-fade-in">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-200">
+                    <ArrowRight className="h-3 w-3 text-amber-500" />
+                    <span className="text-[10px] text-amber-700 font-medium">Call transferred to agent</span>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
 
-        {/* Sidebar */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Session Status</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <dl className="space-y-2.5">
-                <div className="flex justify-between">
-                  <dt className="type-micro text-muted-foreground">Status</dt>
-                  <dd>
-                    <Badge
-                      variant="secondary"
-                      className={
-                        showTransferBanner
-                          ? "bg-amber-100 text-amber-700"
-                          : isActive
-                          ? "bg-emerald-100 text-emerald-700"
-                          : isConnecting
-                          ? "bg-amber-100 text-amber-700"
-                          : "bg-gray-100 text-gray-600"
-                      }
-                    >
-                      {showTransferBanner ? (showScreenPop ? "Transferred" : "Transferring...") : isActive ? "Connected" : isConnecting ? "Connecting..." : "Disconnected"}
-                    </Badge>
-                  </dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="type-micro text-muted-foreground">Agent</dt>
-                  <dd className="text-xs font-medium text-foreground">
-                    {isActive ? "Speaking" : "Idle"}
-                  </dd>
-                </div>
-                <div className="flex justify-between">
-                  <dt className="type-micro text-muted-foreground">Messages</dt>
-                  <dd className="text-xs font-mono font-medium text-foreground">
-                    {messages.length}
-                  </dd>
-                </div>
-                {conversationId && (
-                  <div className="flex justify-between">
-                    <dt className="type-micro text-muted-foreground">Session ID</dt>
-                    <dd className="text-[10px] font-mono text-muted-foreground truncate max-w-[120px]" title={conversationId}>
-                      {conversationId.slice(0, 12)}...
-                    </dd>
-                  </div>
-                )}
-                {(isSaving || savedCallId) && (
-                  <div className="flex justify-between items-center">
-                    <dt className="type-micro text-muted-foreground">Call Log</dt>
-                    <dd>
-                      {isSaving ? (
-                        <Badge className="bg-amber-100 text-amber-700 text-[9px]">
-                          <Loader2 className="h-2.5 w-2.5 mr-1 animate-spin" />
-                          Saving...
-                        </Badge>
-                      ) : (
-                        <Badge className="bg-emerald-100 text-emerald-700 text-[9px]">
-                          <CheckCircle className="h-2.5 w-2.5 mr-1" />
-                          Saved
-                        </Badge>
-                      )}
-                    </dd>
-                  </div>
-                )}
-              </dl>
-              {savedCallId && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full mt-3 text-xs"
-                  onClick={() => navigate(`/calls/${savedCallId}`)}
-                >
-                  <ExternalLink className="h-3 w-3 mr-1.5" />
-                  View in Call Log
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Try These Prompts</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                {[
-                  "I need to check eligibility for a patient",
-                  "Can you look up a claim status?",
-                  "What's the copay for a specialist visit?",
-                  "I need to verify my provider credentials",
-                ].map((prompt, i) => (
-                  <div
-                    key={i}
-                    className="px-3 py-2 rounded-lg bg-secondary/50 border border-border text-[11px] text-muted-foreground"
-                  >
-                    "{prompt}"
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {error && (
-            <Card className="border-destructive/30 bg-destructive/5">
-              <CardContent className="pt-4">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-destructive shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-medium text-destructive mb-1">Connection Error</p>
-                    <p className="text-[11px] text-destructive/80 leading-relaxed">{error}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {!isActive && !isConnecting && (
-            <Button
-              onClick={startConversation}
-              className="w-full reflect-gradient text-white hover:opacity-90 shadow-lg"
+        {/* Controls */}
+        {isActive && (
+          <div className="flex items-center gap-3 pt-3 border-t five9-border shrink-0">
+            <button
+              onClick={() => setMicMuted(!micMuted)}
+              title={micMuted ? "Unmute" : "Mute"}
+              className={`h-9 w-9 rounded-full flex items-center justify-center border transition-colors ${
+                micMuted
+                  ? "bg-red-50 border-red-200 text-red-600"
+                  : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+              }`}
             >
-              <Phone className="h-4 w-4 mr-2" />
-              Start Conversation
-            </Button>
-          )}
-        </div>
+              {micMuted ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
+            </button>
+
+            <div className="flex items-center gap-2 flex-1">
+              {volume > 0 ? (
+                <Volume2 className="h-3.5 w-3.5 text-five9-muted shrink-0" />
+              ) : (
+                <VolumeX className="h-3.5 w-3.5 text-five9-muted shrink-0" />
+              )}
+              <Slider
+                value={[volume]}
+                min={0}
+                max={1}
+                step={0.05}
+                className="flex-1"
+                onValueChange={([v]) => setVolume(v)}
+              />
+            </div>
+
+            <button
+              onClick={endConversation}
+              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500 text-white text-[11px] font-medium hover:bg-red-600 transition-colors"
+            >
+              <PhoneOff className="h-3.5 w-3.5" />
+              End
+            </button>
+          </div>
+        )}
+
+        {/* Post-call actions */}
+        {!isActive && !isConnecting && messages.length > 0 && (
+          <div className="flex items-center gap-2 pt-3 border-t five9-border shrink-0">
+            <button
+              onClick={startConversation}
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg five9-accent-bg text-white text-[11px] font-medium hover:opacity-90 transition-opacity"
+            >
+              <Phone className="h-3.5 w-3.5" />
+              New Conversation
+            </button>
+            {savedCallId && (
+              <a
+                href={`/calls/${savedCallId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-gray-200 bg-white text-[11px] font-medium text-foreground hover:bg-gray-50 transition-colors"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                View in Call Log
+              </a>
+            )}
+          </div>
+        )}
       </div>
 
-      <DemoDataReference />
-
-      {showScreenPop && screenPopData && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-2">
-              Five9 Agent Desktop — What the Agent Sees
-            </span>
-            <div className="h-px flex-1 bg-border" />
+      {/* Error */}
+      {error && (
+        <div className="mx-4 mb-3 p-2.5 rounded-lg bg-red-50 border border-red-200 flex items-start gap-2">
+          <AlertCircle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[10px] font-semibold text-red-700">Connection Error</p>
+            <p className="text-[10px] text-red-600 leading-relaxed">{error}</p>
           </div>
-          <Five9ScreenPop
-            intent={screenPopData.intent}
-            escalationReason={screenPopData.escalationReason}
-            aiSummary={screenPopData.aiSummary}
-            providerName={screenPopData.providerName}
-            providerNpi={screenPopData.providerNpi}
-            patientName={screenPopData.patientName}
-            memberId={screenPopData.memberId}
-            memberDob={screenPopData.memberDob}
-            planName={screenPopData.planName}
-            callerType={screenPopData.callerType || "Provider"}
-            stepsCompleted={screenPopData.stepsCompleted}
-            extractedData={screenPopData.extractedData}
-            recommendedActions={screenPopData.recommendedActions}
-          />
         </div>
       )}
+
+      {/* Try These Prompts (only when idle) */}
+      {!isActive && !isConnecting && messages.length === 0 && (
+        <div className="px-4 pb-3 space-y-1.5">
+          <span className="type-micro uppercase tracking-[0.12em] text-five9-muted flex items-center gap-1">
+            <MessageSquare className="h-3 w-3" /> Try These Prompts
+          </span>
+          <div className="grid grid-cols-2 gap-1.5">
+            {[
+              "I need to check eligibility for a patient",
+              "Can you look up a claim status?",
+              "What's the copay for a specialist visit?",
+              "I need to verify my provider credentials",
+            ].map((prompt, i) => (
+              <div
+                key={i}
+                className="px-2.5 py-1.5 rounded five9-card text-[10px] text-five9-muted"
+              >
+                "{prompt}"
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Demo data reference (collapsed at bottom) */}
+      <div className="px-4 pb-3">
+        <DemoDataReference />
+      </div>
     </div>
   );
 }

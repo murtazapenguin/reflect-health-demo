@@ -3,12 +3,15 @@ from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional
 
 from app.models.call_record import CallRecord
+from app.models.qa_review import QAReview
 from app.modules.dashboard.schemas import (
+    AccuracyKPIResponse,
     CallDetail,
     CallLogResponse,
     CallSummary,
     KPIMetrics,
     KPITrendPoint,
+    QAReviewResponse,
 )
 
 
@@ -107,6 +110,7 @@ async def get_call_detail(call_id: str) -> Optional[CallDetail]:
         source=getattr(record, "source", "bland"),
         auth_success=record.auth_success,
         extracted_data=record.extracted_data,
+        accuracy_scores=record.accuracy_scores,
     )
 
 
@@ -196,3 +200,106 @@ async def update_call_flag(call_id: str, flagged: bool) -> Optional[CallDetail]:
     record.flagged = flagged
     await record.save()
     return await get_call_detail(call_id)
+
+
+def _review_to_response(review: QAReview) -> QAReviewResponse:
+    return QAReviewResponse(
+        id=str(review.id),
+        call_id=review.call_id,
+        reviewer=review.reviewer,
+        review_score=review.review_score,
+        categories=review.categories,
+        notes=review.notes,
+        status=review.status,
+        reviewed_at=review.reviewed_at.isoformat(),
+    )
+
+
+async def create_qa_review(
+    call_id: str,
+    reviewer: str,
+    review_score: int,
+    categories: Dict[str, int],
+    notes: str,
+    status: str,
+) -> QAReviewResponse:
+    review = QAReview(
+        call_id=call_id,
+        reviewer=reviewer,
+        review_score=review_score,
+        categories=categories,
+        notes=notes,
+        status=status,
+    )
+    await review.insert()
+    return _review_to_response(review)
+
+
+async def get_reviews_for_call(call_id: str) -> List[QAReviewResponse]:
+    reviews = await QAReview.find(QAReview.call_id == call_id).sort("-reviewed_at").to_list()
+    return [_review_to_response(r) for r in reviews]
+
+
+async def get_accuracy_kpis() -> AccuracyKPIResponse:
+    scored_records = await CallRecord.find(
+        {"accuracy_scores.overall_auto_score": {"$exists": True}}
+    ).to_list()
+
+    all_reviews = await QAReview.find_all().sort("-reviewed_at").to_list()
+
+    reviewed_call_ids = {r.call_id for r in all_reviews}
+
+    total_scored = len(scored_records)
+    auto_scores = [r.accuracy_scores.get("overall_auto_score", 0) for r in scored_records]
+    avg_auto = round(sum(auto_scores) / len(auto_scores), 1) if auto_scores else 0.0
+
+    human_scores = [r.review_score for r in all_reviews if r.review_score > 0]
+    avg_human = round(sum(human_scores) / len(human_scores), 1) if human_scores else None
+
+    distribution = {"90-100": 0, "80-89": 0, "70-79": 0, "60-69": 0, "0-59": 0}
+    for s in auto_scores:
+        if s >= 90:
+            distribution["90-100"] += 1
+        elif s >= 80:
+            distribution["80-89"] += 1
+        elif s >= 70:
+            distribution["70-79"] += 1
+        elif s >= 60:
+            distribution["60-69"] += 1
+        else:
+            distribution["0-59"] += 1
+
+    intent_scores: Dict[str, List[float]] = {}
+    for r in scored_records:
+        intent_key = r.intent or "unknown"
+        score_val = r.accuracy_scores.get("overall_auto_score", 0)
+        intent_scores.setdefault(intent_key, []).append(score_val)
+
+    accuracy_by_intent = {
+        k: round(sum(v) / len(v), 1) for k, v in intent_scores.items() if v
+    }
+
+    all_call_ids = {r.call_id for r in scored_records}
+    needs_review = len(all_call_ids - reviewed_call_ids)
+
+    category_totals: Dict[str, List[int]] = {}
+    for r in all_reviews:
+        for cat, val in r.categories.items():
+            category_totals.setdefault(cat, []).append(val)
+    category_averages = {
+        k: round(sum(v) / len(v), 1) for k, v in category_totals.items() if v
+    }
+
+    recent = [_review_to_response(r) for r in all_reviews[:10]]
+
+    return AccuracyKPIResponse(
+        avg_auto_score=avg_auto,
+        avg_human_score=avg_human,
+        score_distribution=distribution,
+        accuracy_by_intent=accuracy_by_intent,
+        total_scored=total_scored,
+        total_reviewed=len(all_reviews),
+        needs_review=needs_review,
+        recent_reviews=recent,
+        category_averages=category_averages,
+    )
