@@ -1,12 +1,12 @@
-import { Phone, Mail, MessageSquare, Clock, Users, Headphones } from "lucide-react";
+import { Phone, Mail, MessageSquare, Clock, Users, BarChart3 } from "lucide-react";
 import type { Five9SidebarTab } from "./Five9Layout";
 
 const navItems: { icon: typeof Phone; label: string; tab: Five9SidebarTab }[] = [
   { icon: Phone, label: "Calls", tab: "calls" },
   { icon: Mail, label: "Email", tab: "email" },
   { icon: MessageSquare, label: "Chat", tab: "chat" },
-  { icon: Clock, label: "History", tab: "history" },
-  { icon: Headphones, label: "Live Agent", tab: "voiceAgent" },
+  { icon: Clock, label: "Call Log", tab: "history" },
+  { icon: BarChart3, label: "Reporting", tab: "reporting" },
   { icon: Users, label: "Supervisor", tab: "supervisor" },
 ];
 

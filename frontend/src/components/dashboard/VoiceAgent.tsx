@@ -152,6 +152,28 @@ function buildRecommendedActions(messages: Message[], intent: string): string[] 
   return actions;
 }
 
+function extractCallerType(messages: Message[]): "Provider" | "Member" | undefined {
+  const userText = messages.filter((m) => m.role === "user").map((m) => m.text).join(" ").toLowerCase();
+  if (userText.includes("provider") || userText.includes("practice") || userText.includes("doctor") || userText.includes("clinic")) return "Provider";
+  if (userText.includes("member") || userText.includes("patient") || userText.includes("subscriber")) return "Member";
+  const agentText = messages.filter((m) => m.role === "agent").map((m) => m.text).join(" ").toLowerCase();
+  if (agentText.includes("your npi") || agentText.includes("provider")) return "Provider";
+  if (agentText.includes("your member id") || agentText.includes("as a member")) return "Member";
+  return undefined;
+}
+
+function extractPatientName(messages: Message[]): string | undefined {
+  for (const m of messages) {
+    if (m.role === "agent") {
+      const verifiedMatch = m.text.match(/(?:Patient verified|Verified)[^.]*?([A-Z][a-z]+\s+[A-Z][a-z]+)/);
+      if (verifiedMatch) return verifiedMatch[1];
+      const forMatch = m.text.match(/(?:record|results?|coverage|eligibility|information|details)\s+(?:for|of)\s+([A-Z][a-z]+\s+[A-Z][a-z]+)/);
+      if (forMatch) return forMatch[1];
+    }
+  }
+  return undefined;
+}
+
 function buildExtractedData(messages: Message[]): Record<string, string> {
   const data: Record<string, string> = {};
 
@@ -176,6 +198,16 @@ function buildExtractedData(messages: Message[]): Record<string, string> {
 
     const statusMatch = m.text.match(/(?:claim|status|coverage)\s+(?:is\s+)?(?:currently\s+)?(active|inactive|termed|paid|denied|pending|in[- ]process)/i);
     if (statusMatch && !data["Status"]) data["Status"] = statusMatch[1].charAt(0).toUpperCase() + statusMatch[1].slice(1);
+
+    if (m.role === "user") {
+      const zipMatch = m.text.match(/\b(\d{5})\b/);
+      if (zipMatch && !data["Zip"]) data["Zip"] = zipMatch[1];
+    }
+
+    if (m.role === "agent" && !data["Provider"]) {
+      const drMatch = m.text.match(/(?:Dr\.?|Doctor)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/);
+      if (drMatch) data["Provider"] = `Dr. ${drMatch[1]}`;
+    }
   }
 
   return data;
@@ -201,7 +233,9 @@ export function VoiceAgent() {
   const [showScreenPop, setShowScreenPop] = useState(false);
   const [screenPopData, setScreenPopData] = useState<{
     intent: string; escalationReason: string; aiSummary: string;
-    providerName?: string; memberId?: string;
+    providerName?: string; providerNpi?: string; patientName?: string;
+    memberId?: string; memberDob?: string; planName?: string;
+    callerType?: "Provider" | "Member";
     stepsCompleted?: string[]; extractedData?: Record<string, string>;
     recommendedActions?: string[];
   } | null>(null);
@@ -288,14 +322,21 @@ export function VoiceAgent() {
     // Detect escalation and build screen pop data
     if (detectEscalation(currentMessages)) {
       const intent = extractIntent(currentMessages);
+      const extracted = buildExtractedData(currentMessages);
+      const callerType = extractCallerType(currentMessages);
       const popData = {
         intent,
         escalationReason: "Caller requested human assistance — transferred to agent queue",
         aiSummary: buildElevenLabsSummary(currentMessages, intent),
-        providerName: extractProviderName(currentMessages),
-        memberId: extractMemberId(currentMessages),
+        providerName: extracted["Provider"] || extractProviderName(currentMessages),
+        providerNpi: extracted["NPI"],
+        patientName: extractPatientName(currentMessages),
+        memberId: extracted["Member ID"] || extractMemberId(currentMessages),
+        memberDob: extracted["DOB"],
+        planName: extracted["Plan"],
+        callerType,
         stepsCompleted: buildStepsCompleted(currentMessages),
-        extractedData: buildExtractedData(currentMessages),
+        extractedData: extracted,
         recommendedActions: buildRecommendedActions(currentMessages, intent),
       };
       setScreenPopData(popData);
@@ -683,8 +724,12 @@ export function VoiceAgent() {
             escalationReason={screenPopData.escalationReason}
             aiSummary={screenPopData.aiSummary}
             providerName={screenPopData.providerName}
+            providerNpi={screenPopData.providerNpi}
+            patientName={screenPopData.patientName}
             memberId={screenPopData.memberId}
-            callerType="Provider"
+            memberDob={screenPopData.memberDob}
+            planName={screenPopData.planName}
+            callerType={screenPopData.callerType || "Provider"}
             stepsCompleted={screenPopData.stepsCompleted}
             extractedData={screenPopData.extractedData}
             recommendedActions={screenPopData.recommendedActions}

@@ -143,14 +143,22 @@ def _merge_tool_result(extracted: Dict, name: str, params: Dict, result: Dict):
         extracted["practice_name"] = result.get("practice_name")
     elif "verify" in name and "member" in name:
         extracted["member_verified"] = result.get("verified", False)
+        if params.get("caller_type"):
+            extracted["caller_type"] = params["caller_type"]
+        # Always save what was attempted from params (even on failure)
+        if params.get("patient_name"):
+            extracted.setdefault("patient_name", params["patient_name"])
+        if params.get("patient_dob"):
+            extracted.setdefault("patient_dob", params["patient_dob"])
+        if params.get("member_id"):
+            extracted.setdefault("member_id", params["member_id"])
+        # Overwrite with verified data from result if available
         if result.get("member_id"):
             extracted["member_id"] = result["member_id"]
         if result.get("patient_name"):
             extracted["patient_name"] = result["patient_name"]
         if result.get("plan_name"):
             extracted["plan_name"] = result["plan_name"]
-        if params.get("caller_type"):
-            extracted["caller_type"] = params["caller_type"]
     elif "zip" in name or "verify" in name:
         extracted["zip_verified"] = result.get("verified", False)
         if result.get("provider_name"):

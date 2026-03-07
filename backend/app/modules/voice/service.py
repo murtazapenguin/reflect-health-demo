@@ -541,6 +541,14 @@ async def verify_member(
             spoken_summary=f"Verified. Welcome, {member.first_name}. You are on the {member.plan_name} plan.",
         )
 
+    PHI_FAILURE_SUMMARY = (
+        "To proceed with your request, I need to verify the patient with three pieces of "
+        "information: their full name, date of birth, and Member ID. If you don't have all "
+        "three available, I'd recommend gathering that information and calling back. Would "
+        "you like to end the call, or would you prefer I connect you with a team member who "
+        "may be able to help?"
+    )
+
     # Provider path: need name + DOB + (member_id or fallback)
     if not patient_name or not patient_dob:
         missing = []
@@ -551,7 +559,7 @@ async def verify_member(
         return VerifyMemberResponse(
             verified=False,
             message=f"Missing {' and '.join(missing)}. All three verification factors are required.",
-            spoken_summary=f"I need the patient's {' and '.join(missing)} to proceed.",
+            spoken_summary=PHI_FAILURE_SUMMARY,
         )
 
     has_third_factor = bool(member_id or ssn_last4 or address_zip)
@@ -559,7 +567,7 @@ async def verify_member(
         return VerifyMemberResponse(
             verified=False,
             message="A third verification factor is required: member ID, last 4 of SSN, or zip code on file.",
-            spoken_summary="I also need one more piece of information to verify the patient: their member ID, the last four digits of their Social Security number, or their zip code on file.",
+            spoken_summary=PHI_FAILURE_SUMMARY,
         )
 
     dob_normalized = _normalize_dob(patient_dob)
@@ -569,7 +577,7 @@ async def verify_member(
         return VerifyMemberResponse(
             verified=False,
             message=f"No patient found matching '{patient_name}' with DOB '{patient_dob}'.",
-            spoken_summary=f"I was unable to find a patient named {patient_name} with that date of birth. Please verify and try again.",
+            spoken_summary=PHI_FAILURE_SUMMARY,
         )
 
     # Check third factor against found members
@@ -613,7 +621,7 @@ async def verify_member(
     return VerifyMemberResponse(
         verified=False,
         message="Patient name and date of birth matched, but the third verification factor did not match our records.",
-        spoken_summary="I found a patient with that name and date of birth, but the additional verification information didn't match. Could you double-check and try again?",
+        spoken_summary=PHI_FAILURE_SUMMARY,
     )
 
 
