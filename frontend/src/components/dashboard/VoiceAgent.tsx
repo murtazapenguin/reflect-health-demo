@@ -47,12 +47,14 @@ export function VoiceAgent() {
   const [micMuted, setMicMuted] = useState(false);
   const [savedCallId, setSavedCallId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [wasTransferred, setWasTransferred] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<Date | null>(null);
   const isEndingRef = useRef(false);
 
-  const { conversationId, setConversationId, setIsCallActive } = useConversationContext();
+  const {
+    conversationId, setConversationId, setIsCallActive,
+    wasTransferred, setWasTransferred, setTransferReason,
+  } = useConversationContext();
 
   const conversation = useConversation({
     onConnect: async ({ conversationId: connId }) => {
@@ -63,6 +65,7 @@ export function VoiceAgent() {
       startTimeRef.current = new Date();
       setSavedCallId(null);
       setWasTransferred(false);
+      setTransferReason(null);
       isEndingRef.current = false;
 
       try {
@@ -102,11 +105,24 @@ export function VoiceAgent() {
     }
   }, [messages]);
 
+  useEffect(() => {
+    if (wasTransferred || messages.length === 0) return;
+    if (detectTransfer(messages)) {
+      setWasTransferred(true);
+      const triggerMsg = [...messages]
+        .filter((m) => m.role === "agent")
+        .reverse()
+        .find((m) => TRANSFER_PHRASES.some((p) => m.text.toLowerCase().includes(p)));
+      setTransferReason(triggerMsg?.text ?? null);
+    }
+  }, [messages, wasTransferred, setWasTransferred, setTransferReason]);
+
   const startConversation = useCallback(async () => {
     setIsConnecting(true);
     setError(null);
     setMessages([]);
     setWasTransferred(false);
+    setTransferReason(null);
 
     try {
       const { signed_url } = await api.getElevenLabsSignedUrl();
@@ -131,10 +147,6 @@ export function VoiceAgent() {
     const convId = conversationId;
 
     if (currentMessages.length === 0) return;
-
-    if (detectTransfer(currentMessages)) {
-      setWasTransferred(true);
-    }
 
     setIsSaving(true);
     const duration = startTimeRef.current

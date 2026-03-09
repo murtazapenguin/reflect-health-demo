@@ -2,7 +2,7 @@ import {
   ArrowRight, UserCheck, Fingerprint, Sparkles, Database,
   CheckCircle2, XCircle, Loader2, Shield, FileText,
   AlertTriangle, Phone, Clock, DollarSign, Activity,
-  Lightbulb, User, CreditCard, ClipboardList,
+  Lightbulb, User, CreditCard, ClipboardList, PhoneForwarded,
 } from "lucide-react";
 import { useConversationContext } from "@/contexts/ConversationContext";
 import { useCallEvents, type PipelineStage } from "@/hooks/use-call-events";
@@ -59,7 +59,7 @@ function formatDollars(amount: number | null | undefined): string {
 }
 
 export function Five9AIPanel() {
-  const { conversationId, isCallActive } = useConversationContext();
+  const { conversationId, isCallActive, wasTransferred, transferReason } = useConversationContext();
   const { events, pipelineStage, verification, dataResult } = useCallEvents(conversationId);
 
   const memberId = verification.member.verified ? verification.member.memberId : undefined;
@@ -436,8 +436,107 @@ export function Five9AIPanel() {
         </div>
       )}
 
+      {/* ── HANDOFF SUMMARY (shown when transfer detected) ── */}
+      {wasTransferred && (
+        <div className="five9-card p-2.5 space-y-2 animate-fade-in border-amber-300 bg-amber-50/50">
+          <div className="flex items-center gap-1.5">
+            <PhoneForwarded className="h-3.5 w-3.5 text-amber-600" />
+            <span className="text-[11px] font-bold text-amber-800 uppercase tracking-wide">Handoff Summary</span>
+          </div>
+
+          {/* Escalation reason */}
+          {transferReason && (
+            <div className="bg-white rounded p-2 border border-amber-200">
+              <span className="text-[9px] font-semibold text-amber-700 uppercase tracking-wider block mb-0.5">Escalation Reason</span>
+              <p className="text-[10px] text-foreground leading-relaxed">{transferReason}</p>
+            </div>
+          )}
+
+          {/* Collected context summary */}
+          <div className="bg-white rounded p-2 border border-amber-200 space-y-1">
+            <span className="text-[9px] font-semibold text-amber-700 uppercase tracking-wider block mb-0.5">Caller Context</span>
+            {verification.npi.done && verification.npi.valid && (
+              <>
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-muted-foreground">NPI</span>
+                  <span className="font-mono text-foreground">{verification.npi.npi}</span>
+                </div>
+                {verification.npi.providerName && (
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-muted-foreground">Provider</span>
+                    <span className="text-foreground">{verification.npi.providerName}</span>
+                  </div>
+                )}
+              </>
+            )}
+            {verification.zip.done && verification.zip.verified && verification.zip.zipCode && (
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-muted-foreground">Zip Code</span>
+                <span className="font-mono text-foreground">{verification.zip.zipCode}</span>
+              </div>
+            )}
+            {verification.member.done && verification.member.verified && (
+              <>
+                {verification.member.patientName && (
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-muted-foreground">Patient</span>
+                    <span className="text-foreground">{verification.member.patientName}</span>
+                  </div>
+                )}
+                {verification.member.memberId && (
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-muted-foreground">Member ID</span>
+                    <span className="font-mono text-foreground">{verification.member.memberId}</span>
+                  </div>
+                )}
+                {verification.member.planName && (
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-muted-foreground">Plan</span>
+                    <span className="text-foreground">{verification.member.planName}</span>
+                  </div>
+                )}
+              </>
+            )}
+            {verification.member.done && !verification.member.verified && (
+              <div className="text-[10px] text-amber-600 italic">Patient verification was not completed</div>
+            )}
+            {!verification.npi.done && !verification.member.done && (
+              <div className="text-[10px] text-amber-600 italic">No caller verification was completed before transfer</div>
+            )}
+          </div>
+
+          {/* Recommended next steps */}
+          <div className="bg-white rounded p-2 border border-amber-200 space-y-1">
+            <span className="text-[9px] font-semibold text-amber-700 uppercase tracking-wider block mb-0.5">Recommended Next Steps</span>
+            {!verification.member.done || !verification.member.verified ? (
+              <div className="flex items-start gap-1.5 text-[10px]">
+                <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0 mt-0.5" />
+                <span className="text-foreground">Verify caller identity through alternate method</span>
+              </div>
+            ) : (
+              <div className="flex items-start gap-1.5 text-[10px]">
+                <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0 mt-0.5" />
+                <span className="text-foreground">Caller identity verified — proceed with request</span>
+              </div>
+            )}
+            {intent && (
+              <div className="flex items-start gap-1.5 text-[10px]">
+                <Lightbulb className="h-3 w-3 text-blue-500 shrink-0 mt-0.5" />
+                <span className="text-foreground">Caller's intent: <span className="font-semibold">{intent}</span></span>
+              </div>
+            )}
+            {!intent && (
+              <div className="flex items-start gap-1.5 text-[10px]">
+                <Lightbulb className="h-3 w-3 text-blue-500 shrink-0 mt-0.5" />
+                <span className="text-foreground">Ask the caller how you can help — intent was not determined by AI</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── AGENT ASSIST ── */}
-      {(intent || (verification.member.done && !verification.member.verified)) && (
+      {!wasTransferred && (intent || (verification.member.done && !verification.member.verified)) && (
         <div className="five9-card p-2.5 space-y-1.5 animate-fade-in">
           <span className="type-micro uppercase tracking-[0.12em] text-five9-muted flex items-center gap-1">
             <Lightbulb className="h-3 w-3" /> Agent Assist
