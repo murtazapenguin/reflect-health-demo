@@ -3,7 +3,7 @@ import { useConversation } from "@elevenlabs/react";
 import {
   Mic, MicOff, PhoneOff, Volume2, VolumeX, Loader2,
   MessageSquare, Bot, User, AlertCircle, Phone, ExternalLink, CheckCircle,
-  ArrowRight,
+  ArrowRight, PhoneForwarded,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { api } from "@/lib/api";
@@ -24,6 +24,8 @@ const TRANSFER_PHRASES = [
   "escalating to",
   "i'll connect you to a",
 ];
+
+const TRANSFER_MODAL_DURATION_MS = 3000;
 
 function detectTransfer(messages: Message[]): boolean {
   const lastAgentMessages = messages.filter((m) => m.role === "agent").slice(-3);
@@ -47,6 +49,7 @@ export function VoiceAgent() {
   const [micMuted, setMicMuted] = useState(false);
   const [savedCallId, setSavedCallId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const startTimeRef = useRef<Date | null>(null);
   const isEndingRef = useRef(false);
@@ -114,8 +117,17 @@ export function VoiceAgent() {
         .reverse()
         .find((m) => TRANSFER_PHRASES.some((p) => m.text.toLowerCase().includes(p)));
       setTransferReason(triggerMsg?.text ?? null);
+      setShowTransferModal(true);
     }
   }, [messages, wasTransferred, setWasTransferred, setTransferReason]);
+
+  useEffect(() => {
+    if (!showTransferModal) return;
+    const timeout = window.setTimeout(() => {
+      setShowTransferModal(false);
+    }, TRANSFER_MODAL_DURATION_MS);
+    return () => window.clearTimeout(timeout);
+  }, [showTransferModal]);
 
   const startConversation = useCallback(async () => {
     setIsConnecting(true);
@@ -123,6 +135,7 @@ export function VoiceAgent() {
     setMessages([]);
     setWasTransferred(false);
     setTransferReason(null);
+    setShowTransferModal(false);
 
     try {
       const { signed_url } = await api.getElevenLabsSignedUrl();
@@ -191,6 +204,29 @@ export function VoiceAgent() {
 
   return (
     <div className="five9-panel-bg h-full flex flex-col">
+      {showTransferModal && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowTransferModal(false);
+          }}
+        >
+          <div className="bg-card rounded-lg shadow-2xl px-4 py-3 border border-border animate-scale-in flex items-center gap-3">
+            <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center">
+              <PhoneForwarded className="h-4 w-4 text-amber-700" />
+            </div>
+            <div className="flex flex-col">
+              <span className="text-xs font-semibold text-foreground">
+                Transferring to human
+              </span>
+              <span className="text-[11px] text-muted-foreground">
+                Connecting your call to a team member...
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b five9-border shrink-0">
         <div className="flex items-center gap-2">
