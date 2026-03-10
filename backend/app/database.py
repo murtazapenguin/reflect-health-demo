@@ -33,15 +33,21 @@ async def init_db(settings: Settings) -> None:
         document_models=[User, Provider, Member, Claim, PriorAuth, CallRecord, QAReview, AuditLog],
     )
 
-    await CallRecord.get_motor_collection().create_index(
-        "created_at", expireAfterSeconds=settings.data_retention_days * 86400,
-    )
-    await QAReview.get_motor_collection().create_index(
-        "reviewed_at", expireAfterSeconds=settings.data_retention_days * 86400,
-    )
-    await AuditLog.get_motor_collection().create_index(
-        "timestamp", expireAfterSeconds=settings.audit_retention_days * 86400,
-    )
+    from loguru import logger
+    try:
+        expire_call = settings.data_retention_days * 86400
+        expire_audit = settings.audit_retention_days * 86400
+        await database[CallRecord.Settings.name].create_index(
+            "created_at", expireAfterSeconds=expire_call,
+        )
+        await database[QAReview.Settings.name].create_index(
+            "reviewed_at", expireAfterSeconds=expire_call,
+        )
+        await database[AuditLog.Settings.name].create_index(
+            "timestamp", expireAfterSeconds=expire_audit,
+        )
+    except Exception as e:
+        logger.warning("TTL index creation failed (non-fatal): {}", e)
 
 
 async def close_db() -> None:

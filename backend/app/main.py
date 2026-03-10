@@ -18,7 +18,10 @@ def _configure_logging() -> None:
     logger.remove()
 
     def _redacting_sink(message):
-        sys.stderr.write(redact_phi(str(message)))
+        try:
+            sys.stderr.write(redact_phi(str(message)))
+        except Exception:
+            sys.stderr.write(str(message))
 
     settings = get_settings()
     logger.add(_redacting_sink, level=settings.log_level, colorize=False)

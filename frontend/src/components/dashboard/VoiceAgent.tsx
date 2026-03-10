@@ -281,7 +281,7 @@ export function VoiceAgent() {
       {/* Conversation area */}
       <div className="flex-1 flex flex-col min-h-0 px-4 py-3">
         <div ref={transcriptRef} className="flex-1 overflow-y-auto space-y-2.5 mb-3 pr-1">
-          {messages.length === 0 && !isActive && !isConnecting ? (
+          {messages.length === 0 && !isActive ? (
             <div className="flex flex-col items-center justify-center h-full text-center px-8">
               <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
                 <Mic className="h-7 w-7 text-gray-400" />
