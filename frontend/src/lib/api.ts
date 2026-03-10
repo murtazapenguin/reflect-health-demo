@@ -219,7 +219,9 @@ export const api = {
     }),
 
   getCallerContext: (memberId: string) =>
-    request<CallerContext>(`/voice/caller-context/${encodeURIComponent(memberId)}`),
+    request<CallerContext>(`/voice/caller-context/${encodeURIComponent(memberId)}`, {
+      headers: { ...getHeaders(), "X-Internal-Token": import.meta.env.VITE_INTERNAL_API_TOKEN || "reflect-internal-token-2026" },
+    }),
 
   getElevenLabsSignedUrl: () => request<{ signed_url: string }>("/elevenlabs/token"),
   getElevenLabsConfig: () => request<{ agent_id: string }>("/elevenlabs/config"),

@@ -3,6 +3,7 @@ from typing import Optional
 
 from loguru import logger
 
+from app.common.redact import redact_transcript
 from app.models.call_record import CallRecord
 from app.modules.dashboard.accuracy import compute_accuracy_scores
 from app.modules.webhooks.schemas import BlandCallCompletePayload
@@ -193,7 +194,7 @@ async def ingest_bland_call(payload: BlandCallCompletePayload) -> CallRecord:
 
         if has_better_transcript or has_better_data or is_complete:
             if transcript_entries:
-                existing.transcript = transcript_entries
+                existing.transcript = redact_transcript(transcript_entries)
             if payload.recording_url:
                 existing.recording_url = payload.recording_url
             if duration and duration > 0:
@@ -240,7 +241,7 @@ async def ingest_bland_call(payload: BlandCallCompletePayload) -> CallRecord:
         provider_name=provider_name,
         patient_name=patient_name,
         patient_dob=patient_dob,
-        transcript=transcript_entries,
+        transcript=redact_transcript(transcript_entries),
         recording_url=payload.recording_url,
         tags=tags,
         flagged=False,

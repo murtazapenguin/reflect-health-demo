@@ -19,6 +19,7 @@ async def init_db(settings: Settings) -> None:
     )
     database = _client[settings.mongodb_db_name]
 
+    from app.models.audit_log import AuditLog
     from app.models.call_record import CallRecord
     from app.models.claim import Claim
     from app.models.member import Member
@@ -29,7 +30,17 @@ async def init_db(settings: Settings) -> None:
 
     await init_beanie(
         database=database,
-        document_models=[User, Provider, Member, Claim, PriorAuth, CallRecord, QAReview],
+        document_models=[User, Provider, Member, Claim, PriorAuth, CallRecord, QAReview, AuditLog],
+    )
+
+    await CallRecord.get_motor_collection().create_index(
+        "created_at", expireAfterSeconds=settings.data_retention_days * 86400,
+    )
+    await QAReview.get_motor_collection().create_index(
+        "reviewed_at", expireAfterSeconds=settings.data_retention_days * 86400,
+    )
+    await AuditLog.get_motor_collection().create_index(
+        "timestamp", expireAfterSeconds=settings.audit_retention_days * 86400,
     )
 
 

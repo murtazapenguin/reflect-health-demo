@@ -19,7 +19,7 @@ lookups with a structured verification flow for both providers and members.
 | Field | Value |
 |-------|-------|
 | Name | `Reflect Health AI Agent` |
-| First Message | `Thank you for calling Reflect Health, this is an AI assistant. Are you calling as a healthcare provider or as a member?` |
+| First Message | `Thank you for calling Reflect Health. This call may be recorded for quality assurance. I'm an AI assistant — are you calling as a healthcare provider or as a member?` |
 | Language | English |
 
 ### System Prompt

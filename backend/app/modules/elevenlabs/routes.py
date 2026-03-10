@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
 
+from app.common.redact import redact_transcript
 from app.config import get_settings
 from app.models.call_record import CallRecord
 from app.modules.dashboard.accuracy import compute_accuracy_scores
@@ -530,7 +531,7 @@ async def save_conversation(body: SaveConversationRequest):
         provider_npi=extracted.get("npi"),
         provider_name=extracted.get("provider_name"),
         patient_name=extracted.get("patient_name"),
-        transcript=transcript_entries,
+        transcript=redact_transcript(transcript_entries),
         tags=tags,
         flagged=is_transferred,
         transferred=is_transferred,

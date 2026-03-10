@@ -14,15 +14,18 @@ import { useConversationContext } from "@/contexts/ConversationContext";
 const TRANSFER_PHRASES = [
   "transfer you",
   "transferring you",
-  "connect you with a",
-  "connecting you with a",
+  "connect you with",
+  "connecting you with",
   "routing you to",
   "passing you to",
   "let me get a human",
+  "human agent",
+  "team member",
+  "team members",
   "hand you off",
   "handing you off",
   "escalating to",
-  "i'll connect you to a",
+  "i'll connect you to",
 ];
 
 const TRANSFER_MODAL_DURATION_MS = 3000;
@@ -264,6 +267,16 @@ export function VoiceAgent() {
           )}
         </div>
       </div>
+
+      {/* AI Disclosure Banner (California AB 489 compliance — non-dismissable during active call) */}
+      {isActive && (
+        <div className="flex items-center justify-center gap-1.5 px-4 py-1.5 bg-blue-50 border-b border-blue-200 shrink-0">
+          <Bot className="h-3 w-3 text-blue-500" />
+          <span className="text-[10px] text-blue-700 font-medium">
+            You are speaking with an AI assistant. Say "transfer me" at any time to reach a human agent.
+          </span>
+        </div>
+      )}
 
       {/* Conversation area */}
       <div className="flex-1 flex flex-col min-h-0 px-4 py-3">

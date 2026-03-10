@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     elevenlabs_api_key: str = ""
     elevenlabs_agent_id: str = ""
 
+    internal_api_token: str = "reflect-internal-token-2026"
+
+    data_retention_days: int = 90
+    audit_retention_days: int = 365
+
     log_level: str = "INFO"
 
     @property

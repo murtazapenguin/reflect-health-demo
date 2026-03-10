@@ -1,13 +1,27 @@
+import sys
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from loguru import logger
 
 from app.common.error_handlers import register_error_handlers
+from app.common.redact import redact_phi
 from app.config import get_settings
 from app.database import close_db, init_db
 from app.middleware.auth import JWTSessionMiddleware
 from app.middleware.cors import configure_cors
+from app.middleware.timing import TimingMiddleware
+
+
+def _configure_logging() -> None:
+    """Replace the default loguru sink with one that redacts PHI."""
+    logger.remove()
+
+    def _redacting_sink(message):
+        sys.stderr.write(redact_phi(str(message)))
+
+    settings = get_settings()
+    logger.add(_redacting_sink, level=settings.log_level, colorize=False)
 
 
 @asynccontextmanager
@@ -22,6 +36,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    _configure_logging()
     settings = get_settings()
     app = FastAPI(
         title="Reflect Health AI Operations Center",
@@ -32,6 +47,7 @@ def create_app() -> FastAPI:
     )
 
     app.add_middleware(JWTSessionMiddleware)
+    app.add_middleware(TimingMiddleware)
     configure_cors(app, settings)
 
     register_error_handlers(app)

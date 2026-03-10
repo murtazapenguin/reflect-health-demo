@@ -132,6 +132,47 @@ def _score_response(record: CallRecord) -> int:
     return round(50 + 50 * ratio)
 
 
+def _spot_check_hallucinations(data: Dict[str, Any], transcript: List[Dict[str, Any]]) -> List[str]:
+    """Compare key data points the agent spoke against tool-call results.
+    Returns a list of mismatch descriptions (empty = no hallucinations detected)."""
+    ai_text = " ".join(
+        e.get("text", "") for e in transcript if e.get("speaker") == "AI"
+    ).lower()
+
+    if not ai_text:
+        return []
+
+    flags: List[str] = []
+
+    dollar_fields = {
+        "copay_primary": "copay",
+        "copay_specialist": "specialist copay",
+        "deductible": "deductible",
+        "paid_amount": "paid amount",
+        "billed_amount": "billed amount",
+        "patient_responsibility": "patient responsibility",
+    }
+    for field, label in dollar_fields.items():
+        value = data.get(field)
+        if value is None:
+            continue
+        str_val = str(value)
+        formatted_val = f"${value:,.2f}" if isinstance(value, (int, float)) else str_val
+        alt_formatted = f"${value:,.0f}" if isinstance(value, (int, float)) else str_val
+        if str_val not in ai_text and formatted_val.lower() not in ai_text and alt_formatted.lower() not in ai_text:
+            if any(w in ai_text for w in [label, field.replace("_", " ")]):
+                flags.append(f"{label}: tool returned {formatted_val} but agent may have stated a different amount")
+
+    status_fields = {"claim_status": "claim status", "status": "member status"}
+    for field, label in status_fields.items():
+        value = data.get(field)
+        if value and isinstance(value, str) and value.lower() not in ai_text:
+            if any(w in ai_text for w in ["status", "claim"]):
+                flags.append(f"{label}: tool returned '{value}' but agent may have stated a different status")
+
+    return flags
+
+
 def compute_accuracy_scores(record: CallRecord) -> Dict[str, Any]:
     data = record.extracted_data or {}
     transcript = record.transcript or []
@@ -149,11 +190,15 @@ def compute_accuracy_scores(record: CallRecord) -> Dict[str, Any]:
         + response * 0.25
     )
 
+    hallucination_flags = _spot_check_hallucinations(data, transcript)
+
     return {
         "verification_score": verification,
         "data_retrieval_score": data_retrieval,
         "intent_score": intent_score,
         "response_score": response,
         "overall_auto_score": overall,
+        "hallucination_flags": hallucination_flags,
+        "hallucination_count": len(hallucination_flags),
         "scored_at": datetime.now(timezone.utc).isoformat(),
     }

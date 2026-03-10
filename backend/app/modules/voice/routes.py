@@ -1,7 +1,10 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from loguru import logger
 from pydantic import BaseModel
+
+from app.common.audit import audit
+from app.config import get_settings
 
 from app.models.claim import Claim
 from app.models.member import Member
@@ -99,6 +102,11 @@ async def api_authenticate_npi(request: Request):
         "provider_name": result.provider_name,
         "practice_name": result.practice_name,
     })
+    await audit(
+        "verification_attempt", f"provider:{data.get('npi', 'unknown')}",
+        f"npi:{data.get('npi', '')}", {"valid": result.valid},
+        ip_address=request.client.host if request.client else None,
+    )
     return result
 
 
@@ -113,6 +121,11 @@ async def api_verify_zip(request: Request):
         "verified": result.verified,
         "provider_name": result.provider_name,
     })
+    await audit(
+        "verification_attempt", f"provider:{data.get('npi', 'unknown')}",
+        f"zip:{data.get('zip_code', '')}", {"verified": result.verified},
+        ip_address=request.client.host if request.client else None,
+    )
     return result
 
 
@@ -137,6 +150,11 @@ async def api_verify_member(request: Request):
         "caller_type": data.get("caller_type"),
         "message": result.message,
     })
+    await audit(
+        "verification_attempt", f"{data.get('caller_type', 'unknown')}:{data.get('member_id', 'unknown')}",
+        f"member:{result.member_id or data.get('member_id', '')}", {"verified": result.verified},
+        ip_address=request.client.host if request.client else None,
+    )
     return result
 
 
@@ -152,6 +170,11 @@ async def api_eligibility(request: Request):
         service_type=data.get("service_type"),
     )
     emit_event("eligibility_retrieved", result.model_dump())
+    await audit(
+        "data_lookup", f"provider:{data.get('npi', 'unknown')}",
+        f"member:{data.get('member_id', '')}", {"intent": "eligibility", "found": result.found},
+        ip_address=request.client.host if request.client else None,
+    )
     return result
 
 
@@ -169,14 +192,28 @@ async def api_claims(request: Request):
         billed_amount=data.get("billed_amount"),
     )
     emit_event("claim_retrieved", result.model_dump())
+    await audit(
+        "data_lookup", f"provider:{data.get('npi', 'unknown')}",
+        f"claim:{data.get('claim_number') or data.get('member_id', '')}", {"intent": "claims", "found": result.found},
+        ip_address=request.client.host if request.client else None,
+    )
     return result
 
 
 # ── Caller context ──────────────────────────────────────────────────
 
 @router.get("/caller-context/{member_id}", summary="Get full caller context for a verified member")
-async def api_caller_context(member_id: str):
+async def api_caller_context(member_id: str, request: Request):
+    settings = get_settings()
+    token = request.headers.get("X-Internal-Token", "")
+    if token != settings.internal_api_token:
+        raise HTTPException(status_code=403, detail="Forbidden")
     mid = member_id.strip().upper()
+    await audit(
+        "phi_access", f"frontend:{mid}",
+        f"member:{mid}", {"endpoint": "caller-context"},
+        ip_address=request.client.host if request.client else None,
+    )
     member = await Member.find_one(Member.member_id == mid)
     if not member:
         return {"found": False, "message": f"No member found with ID {mid}"}
